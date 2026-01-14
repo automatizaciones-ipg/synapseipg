@@ -23,7 +23,7 @@ export type ActionResponse<T = null> = {
 }
 
 // ---------------------------------------------------------
-// 1. CREAR CARPETA
+// 1. CREAR CARPETA (Ahora crea todo como global por defecto)
 // ---------------------------------------------------------
 export async function createFolder(
   name: string, 
@@ -36,14 +36,10 @@ export async function createFolder(
 
   if (!user) return { success: false, message: "Debes iniciar sesión." }
 
+  // Normalizamos la categoría
   let finalCategory = categoryInput;
-  let finalIsGlobal = false;
-
   if (categoryInput === "Globales" || categoryInput === "Todos" || categoryInput?.trim() === "") {
     finalCategory = null;
-    finalIsGlobal = true; 
-  } else {
-    finalIsGlobal = false; 
   }
 
   const { data, error } = await supabase
@@ -52,7 +48,7 @@ export async function createFolder(
       name,
       parent_id: parentId,
       user_id: user.id,
-      is_global: finalIsGlobal,
+      is_global: true, // Guardamos siempre como true para mantener orden, pero ya no afectará la lectura
       category: finalCategory 
     })
     .select('*')
@@ -64,53 +60,62 @@ export async function createFolder(
   }
   
   revalidatePath('/', 'layout')
-  // MENSAJE AGREGADO AQUÍ
   return { success: true, data: data as FolderRow, message: "Carpeta creada correctamente." }
 }
 
 // ---------------------------------------------------------
-// 2. OBTENER CARPETAS (INTACTO)
-// ---------------------------------------------------------
+// 2. OBTENER CARPETAS (MODO: TODO PÚBLICO)
+
+
 export async function getFolders(
   parentId: string | null, 
-  isGlobalTab: boolean, 
+  isGlobalTab: boolean, // Mantenemos el argumento para no romper llamadas, pero no lo usaremos para restringir
   categoryInput: string | null = null 
 ): Promise<ActionResponse<FolderRow[]>> {
   const supabase = await createClient()
+  
+  // Solo verificamos que esté logueado, no quién es.
   const { data: { user } } = await supabase.auth.getUser()
-
   if (!user) return { success: false, data: [] }
 
+  // 1. Consulta limpia: Trae todo
   let query = supabase
     .from('folders')
     .select('*')
     .order('name')
 
+  // 2. Filtro de Carpeta Padre (Navegación)
+  // Fundamental para entrar y salir de carpetas
   if (parentId) {
     query = query.eq('parent_id', parentId)
   } else {
     query = query.is('parent_id', null)
   }
 
-  if (categoryInput && categoryInput !== "Globales" && categoryInput !== "Todos") {
+  // 3. Filtro de Pestañas (Visualización)
+  // Esto solo organiza visualmente, no oculta por seguridad
+  if (categoryInput && categoryInput !== "Todos" && categoryInput !== "Globales") {
+      // Si el usuario clicó "RRHH", mostramos carpetas de RRHH
       query = query.eq('category', categoryInput)
-      if (!isGlobalTab) query = query.eq('user_id', user.id) 
-  } 
-  else if (isGlobalTab || categoryInput === "Globales") {
-      query = query.eq('is_global', true)
-      if (!parentId) query = query.is('category', null)
-  } 
-  else {
-      query = query
-        .eq('user_id', user.id)
-        .eq('is_global', false)
-        .is('category', null) 
+  } else {
+      // Si está en Inicio/Globales/Todos, mostramos:
+      // a) Las que dicen 'General' (que seteamos en el SQL)
+      // b) O las que sean NULL (por si acaso)
+      // c) O las que sean Globales
+      // Para simplificar al máximo y ver TODO en el inicio:
+      
+      // Opción A: Si quieres ver ABSOLUTAMENTE TODO en el inicio mezclado:
+      // (No agregues ningún filtro .eq más aquí)
+      
+      // Opción B (Recomendada): Mostrar solo las de nivel raíz que no son de una categoría específica
+      // Como en el SQL pusimos 'General' a las vacías, filtramos por eso o NULL.
+      query = query.or('category.is.null,category.eq.General,category.eq.""')
   }
 
   const { data, error } = await query
 
   if (error) {
-    console.error("❌ Error fetching folders:", error.message)
+    console.error("❌ Error DB:", error.message)
     return { success: false, data: [] }
   }
 
@@ -143,7 +148,6 @@ export async function updateFolder(folderId: string, newName: string): Promise<A
   }
 
   revalidatePath('/', 'layout')
-  // MENSAJE AGREGADO AQUÍ
   return { success: true, message: "Carpeta renombrada correctamente." }
 }
 
@@ -155,8 +159,6 @@ export async function deleteFolder(folderId: string): Promise<ActionResponse> {
   
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, message: "No autorizado" }
-
-  console.log(`🗑️ Eliminando carpeta ${folderId}`)
 
   const { data, error } = await supabase
     .from('folders')
@@ -173,8 +175,6 @@ export async function deleteFolder(folderId: string): Promise<ActionResponse> {
     return { success: false, message: "No se encontró la carpeta." }
   }
 
-  console.log("✅ Carpeta eliminada")
   revalidatePath('/', 'layout')
-  // MENSAJE AGREGADO AQUÍ
   return { success: true, message: "Carpeta eliminada correctamente." }
 }
