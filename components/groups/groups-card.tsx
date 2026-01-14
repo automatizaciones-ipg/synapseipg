@@ -1,4 +1,3 @@
-// ARCHIVO: components/dashboard/group-card.tsx
 'use client'
 
 import Link from "next/link"
@@ -17,11 +16,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { cn } from "@/lib/utils"
-// Importamos los tipos correctamente exportados
+// Importamos los tipos correctamente
 import { GroupData, GroupMember } from "@/actions/groups" 
 
-// ✅ UTILIDAD ROBUSTA: Estandarizada para todo el proyecto
+// ✅ UTILIDAD: Iniciales
 function getInitials(name: string) {
   return name
     .match(/(\b\S)?/g)
@@ -31,10 +29,8 @@ function getInitials(name: string) {
     .toUpperCase() || "U"
 }
 
+// ✅ FIX: Eliminados colores no usados para limpiar warnings
 const COLORS = {
-  primary: '#1f64fc', 
-  navy: '#0d2457',
-  slate: '#64748B',
   admin_bg: '#1f64fc',
   member_bg: '#64748B'
 }
@@ -58,7 +54,6 @@ export function GroupCard({ group, onEdit, onDelete }: GroupCardProps) {
     day: 'numeric', month: 'short', year: 'numeric'
   })
 
-  // ✅ TIPADO ESTRICTO: Manejo seguro de arrays
   const membersList: GroupMember[] = group.members || []
   const displayedMembers = membersList.slice(0, 3)
   const extraCount = (group.member_count || 0) - 3
@@ -81,17 +76,17 @@ export function GroupCard({ group, onEdit, onDelete }: GroupCardProps) {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48 rounded-xl border-slate-200 shadow-xl">
                <DropdownMenuItem 
-                  onClick={() => onEdit(group)}
-                  className="gap-2 text-slate-700 focus:text-[#1f64fc] focus:bg-[#1f64fc]/5 cursor-pointer font-medium py-2.5"
+                 onClick={() => onEdit(group)}
+                 className="gap-2 text-slate-700 focus:text-[#1f64fc] focus:bg-[#1f64fc]/5 cursor-pointer font-medium py-2.5"
                >
-                  <Pencil className="w-4 h-4" /> Editar Grupo
+                 <Pencil className="w-4 h-4" /> Editar Grupo
                </DropdownMenuItem>
                <DropdownMenuSeparator className="bg-slate-100"/>
                <DropdownMenuItem 
-                  onClick={() => onDelete(group)}
-                  className="gap-2 text-red-600 focus:text-red-700 focus:bg-red-50 cursor-pointer font-medium py-2.5"
+                 onClick={() => onDelete(group)}
+                 className="gap-2 text-red-600 focus:text-red-700 focus:bg-red-50 cursor-pointer font-medium py-2.5"
                >
-                  <Trash2 className="w-4 h-4" /> Eliminar
+                 <Trash2 className="w-4 h-4" /> Eliminar
                </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -161,7 +156,6 @@ export function GroupCard({ group, onEdit, onDelete }: GroupCardProps) {
              {displayedMembers.map((member, idx) => (
                 <Avatar key={idx} className="h-6 w-6 border-2 border-white ring-1 ring-slate-100" title={member.email}>
                     <AvatarImage src={member.avatar_url || ""} />
-                    {/* ✅ FIX: Iniciales Robustas */}
                     <AvatarFallback className="text-[8px] bg-[#1f64fc]/10 text-[#1f64fc] font-bold">
                       {getInitials(member.full_name || member.email || 'U')}
                     </AvatarFallback>

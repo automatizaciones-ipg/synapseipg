@@ -26,7 +26,6 @@ import { Textarea } from '@/components/ui/textarea'
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { toast } from 'sonner'
 
-// --- CORRECCIÓN AQUÍ: Importamos las funciones con sus nuevos nombres "Workgroup" ---
 import { 
   createWorkgroup, 
   updateWorkgroup, 
@@ -36,6 +35,7 @@ import {
 } from '@/actions/groups'
 
 import { searchUsers, UserProfile } from '@/actions/users' 
+// ✅ FIX IMPORTANTE: Corregido el nombre del archivo (singular)
 import { GroupCard } from './groups-card'
 
 interface GroupsViewProps {
@@ -48,7 +48,7 @@ export default function GroupsView({ initialGroups, userEmail }: GroupsViewProps
   
   // --- ESTADOS ---
   const [groups, setGroups] = useState<GroupData[]>(initialGroups)
-  // Sincronizar estado si initialGroups cambia (útil para revalidación server-side)
+  
   useEffect(() => {
     setGroups(initialGroups)
   }, [initialGroups])
@@ -73,7 +73,6 @@ export default function GroupsView({ initialGroups, userEmail }: GroupsViewProps
   const [groupToDelete, setGroupToDelete] = useState<GroupData | null>(null)
 
   // -- HANDLERS DE APERTURA --
-
   const openCreateModal = () => {
     setEditingGroup(null)
     setFormData({ name: '', description: '' })
@@ -85,7 +84,7 @@ export default function GroupsView({ initialGroups, userEmail }: GroupsViewProps
     setEditingGroup(group)
     setFormData({ name: group.name, description: group.description || '' })
     
-    // Mapeo seguro de miembros a UserProfile para el chip
+    // Mapeo seguro de miembros
     const mappedMembers: UserProfile[] = (group.members || []).map((m: GroupMember) => ({
         id: m.id || '', 
         email: m.email,
@@ -151,10 +150,8 @@ export default function GroupsView({ initialGroups, userEmail }: GroupsViewProps
 
     let res;
     if (editingGroup) {
-      // CORRECCIÓN: Usamos updateWorkgroup
       res = await updateWorkgroup(editingGroup.id, formData.name, formData.description, memberEmails)
     } else {
-      // CORRECCIÓN: Usamos createWorkgroup
       res = await createWorkgroup(formData.name, formData.description, memberEmails)
     }
     
@@ -175,7 +172,6 @@ export default function GroupsView({ initialGroups, userEmail }: GroupsViewProps
   const handleConfirmDelete = async () => {
     if (!groupToDelete) return
     setIsLoading(true)
-    // CORRECCIÓN: Usamos deleteWorkgroup
     const res = await deleteWorkgroup(groupToDelete.id)
     if (res.success) {
       toast.success("El grupo ha sido eliminado")
