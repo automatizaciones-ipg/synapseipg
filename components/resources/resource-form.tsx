@@ -7,14 +7,23 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch" 
-import { Loader2, Sparkles, Save, Folder, Lock, AlertCircle, Globe } from 'lucide-react' 
+import { Loader2, Sparkles, Save, Folder, Lock, AlertCircle, Globe, Ban } from 'lucide-react' 
+
+// Tooltip Components (Requisito para explicar el bloqueo)
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 // Componentes internos
 import { FolderSelector } from "@/components/resources/folder-selector" 
 import { MemberSelector } from './member-selector'
 import { GroupSelector } from './group-selector'
 
-// Tipos
+// Hooks y Tipos
+import { useAiStatus } from "@/hooks/use-ai-status" // 👈 NUEVO HOOK
 import { ResourceFormProps, CATEGORIES } from './new-resource-types'
 
 export function ResourceForm({ 
@@ -25,16 +34,21 @@ export function ResourceForm({
   selectedFolderId, setSelectedFolderId, selectedFolderName, setSelectedFolderName, isAdmin
 }: ResourceFormProps) {
 
+  // 1. Hook de estado de IA
+  const { isEnabled: aiEnabled, isLoading: checkingAi } = useAiStatus()
+
   // --- LÓGICA VISUAL ---
   const visualIsPublic = formData.is_public;
 
-  // Calculamos el nombre visual una sola vez.
   const visualLocationName = (selectedFolderName && selectedFolderName !== 'Inicio') 
     ? selectedFolderName 
     : 'Inicio (Raíz)';
 
   const hasUsers = selectedUsers.length > 0;
   const hasGroups = selectedGroups.length > 0;
+
+  // Lógica de bloqueo del botón
+  const isAiDisabled = aiLoading || checkingAi || !aiEnabled;
 
   return (
     <Card className="border-blue-100 shadow-md h-fit">
@@ -45,20 +59,45 @@ export function ResourceForm({
             {isFile ? <Folder className="w-4 h-4 text-blue-500" /> : <Globe className="w-4 h-4 text-blue-500" />}
             Detalles del Recurso
         </CardTitle>
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          className="text-blue-600 hover:bg-blue-50 h-8 font-medium" 
-          onClick={onAI} 
-          disabled={aiLoading}
-        >
-          {aiLoading ? (
-            <Loader2 className="w-3 h-3 animate-spin mr-2" />
-          ) : (
-            <Sparkles className="w-3 h-3 mr-2 text-yellow-500" />
-          )}
-          Autocompletar
-        </Button>
+        
+        {/* BOTÓN IA CON TOOLTIP CONDICIONAL */}
+        <TooltipProvider>
+          <Tooltip delayDuration={300}>
+            <TooltipTrigger asChild>
+              {/* Envolvemos en span para que el tooltip funcione aunque el botón esté disabled */}
+              <span tabIndex={0}> 
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className={`h-8 font-medium transition-all ${
+                    !aiEnabled && !checkingAi
+                      ? "text-slate-400 bg-slate-100 hover:bg-slate-100 cursor-not-allowed" 
+                      : "text-blue-600 hover:bg-blue-50"
+                  }`}
+                  onClick={onAI} 
+                  disabled={isAiDisabled}
+                >
+                  {aiLoading || checkingAi ? (
+                    <Loader2 className="w-3 h-3 animate-spin mr-2" />
+                  ) : !aiEnabled ? (
+                    <Ban className="w-3 h-3 mr-2" />
+                  ) : (
+                    <Sparkles className="w-3 h-3 mr-2 text-yellow-500" />
+                  )}
+                  Autocompletar
+                </Button>
+              </span>
+            </TooltipTrigger>
+            
+            {/* Solo mostramos tooltip si está deshabilitado por preferencia */}
+            {!aiEnabled && !checkingAi && (
+              <TooltipContent className="bg-slate-900 text-white border-slate-800">
+                <p>La IA está desactivada en tu configuración.</p>
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
+
       </CardHeader>
 
       <CardContent className="space-y-4 pt-6">
@@ -84,14 +123,10 @@ export function ResourceForm({
              <FolderSelector 
                currentFolderId={selectedFolderId}
                currentCategory={formData.category}
-               // Pasamos el nombre visual explícito para que el botón no cambie erráticamente
                currentFolderName={visualLocationName}
-               
                onSelect={(id, name, category) => {
                  setSelectedFolderId(id)
                  setSelectedFolderName(name)
-                 
-                 // Lógica: La carpeta IMPONE la categoría
                  if (category && category !== 'Globales') {
                    setFormData({ ...formData, category: category })
                  }
@@ -107,13 +142,10 @@ export function ResourceForm({
         {/* Categoría y Tags */}
         <div className="grid grid-cols-2 gap-4">
            <div className="space-y-2">
-             {/* FIX: Label indica que es automático */}
              <Label className="flex items-center gap-1.5">
                 Categoría 
                 <Lock className="w-3 h-3 text-slate-400" />
              </Label>
-             
-             {/* FIX: Select con disabled={true} para bloquear manual, pero mantiene value vinculado */}
              <Select 
                disabled={true}
                value={formData.category} 

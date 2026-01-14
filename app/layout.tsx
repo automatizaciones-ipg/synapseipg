@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google"; // ✅ Usamos Inter (sin descarga fallida)
-import "./globals.css"; // ✅ Mantenemos la importación
-import { Toaster } from "@/components/ui/sonner"; 
+import { Inter } from "next/font/google";
+import "./globals.css";
+import { Toaster } from "@/components/ui/sonner";
+import { ThemeProvider } from "@/components/theme-provider";
 
-// Configuramos Inter
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
@@ -17,11 +17,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es">
-      {/* Aplicamos la clase de Inter al body */}
+    <html lang="es" suppressHydrationWarning>
       <body className={`${inter.className} antialiased`}>
-        {children}
-        <Toaster /> 
+        {/* 👇 Envolvemos TODA la aplicación en el Proveedor */}
+        <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+        >
+            {children}
+            <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );

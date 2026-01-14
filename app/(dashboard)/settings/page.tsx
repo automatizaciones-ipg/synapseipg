@@ -3,6 +3,9 @@ import { redirect } from "next/navigation"
 import { SettingsView } from "./settings-view"
 import { Settings } from "lucide-react"
 
+// Importamos el tipo para asegurar que pasamos lo correcto
+import { UserProfile } from "@/types/settings"
+
 export const dynamic = 'force-dynamic'
 
 export default async function SettingsPage() {
@@ -12,41 +15,54 @@ export default async function SettingsPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // 2. Obtener Perfil Completo (Incluyendo Bio)
-  // Asegúrate de que tu tabla 'profiles' tenga la columna 'bio'.
-  const { data: profile } = await supabase
+  // 2. Obtener Perfil Completo (AHORA CON LAS NUEVAS COLUMNAS)
+  const { data: rawProfile } = await supabase
     .from('profiles')
-    .select('full_name, avatar_url, bio') 
+    .select('full_name, avatar_url, bio, theme, email_notifications, ai_autotag') 
     .eq('id', user.id)
     .single()
 
+  // Convertimos al tipo UserProfile para evitar quejas de TypeScript
+  // Si algún campo es null, ponemos defaults seguros
+  const profile: UserProfile = {
+      id: user.id,
+      email: user.email || "",
+      role: 'auditor', // o lo que corresponda
+      full_name: rawProfile?.full_name || "",
+      avatar_url: rawProfile?.avatar_url || "",
+      bio: rawProfile?.bio || "",
+      // Nuevos campos con Fallbacks
+      theme: rawProfile?.theme || 'system',
+      email_notifications: rawProfile?.email_notifications ?? true,
+      ai_autotag: rawProfile?.ai_autotag ?? true
+  }
+
   // 3. CALCULAR ALMACENAMIENTO REAL
-  // Sumamos la columna 'file_size' de todos los recursos que no sean links (file_size > 0)
-  // Nota: Esto calcula el uso GENERAL del proyecto basado en los registros de recursos.
   const { data: files } = await supabase
     .from('resources')
     .select('file_size')
-    .gt('file_size', 0) // Solo archivos reales
+    .eq('created_by', user.id) // IMPORTANTE: Solo contar archivos del usuario
+    .gt('file_size', 0)
+    .is('deleted_at', null) // No contar archivos en papelera
 
-  // Sumar bytes
   const totalBytesUsed = files?.reduce((acc, curr) => acc + (curr.file_size || 0), 0) || 0
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-10">
       <div className="flex items-center gap-3 mb-8">
-        <div className="p-3 bg-slate-100 rounded-xl text-slate-700">
+        <div className="p-3 bg-slate-100 rounded-xl text-slate-700 dark:bg-slate-800 dark:text-slate-200">
             <Settings className="w-6 h-6" />
         </div>
         <div>
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900">Configuración</h1>
-            <p className="text-slate-500">Administra tu cuenta, preferencias y sistema.</p>
+            <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Configuración</h1>
+            <p className="text-slate-500 dark:text-slate-400">Administra tu cuenta, preferencias y sistema.</p>
         </div>
       </div>
 
       <SettingsView 
         user={{ email: user.email || "", id: user.id }} 
-        profile={profile || { full_name: "", avatar_url: "", bio: "" }}
-        storageUsed={totalBytesUsed} // Pasamos el dato real
+        profile={profile}
+        storageUsed={totalBytesUsed} 
       />
     </div>
   )

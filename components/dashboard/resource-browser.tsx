@@ -414,7 +414,7 @@ export function ResourceBrowser({
           )}
           
           <Button asChild className="bg-blue-600 text-white hover:bg-blue-700 shadow-sm transition-colors">
-            <Link href="/resources/new">{isAuditor ? <><Link2 className="w-4 h-4 mr-2" /> Nuevo Enlace</> : <><Plus className="w-4 h-4 mr-2" /> Nuevo Recurso</>}</Link>
+            <Link href="/resources/new">{isAuditor ? <><Link2 className="w-4 h-4 mr-2" /> Nuevo Recurso</> : <><Plus className="w-4 h-4 mr-2" /> Nuevo Recurso</>}</Link>
           </Button>
         </div>
       </div>
