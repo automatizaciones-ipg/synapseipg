@@ -2,7 +2,7 @@ import { SupabaseClient } from "@supabase/supabase-js"
 import { ResourceWithRelations, ResourceProfile, ResourceShareRelation } from "@/components/dashboard/resource-card"
 
 // --- 1. DEFINICIONES DE TIPOS DE LA BASE DE DATOS (RAW) ---
-// Estos tipos representan exactamente cómo viene la data de Supabase antes de procesarla.
+// Representación exacta de lo que devuelve Supabase
 
 interface DBProfile {
   full_name: string | null
@@ -12,7 +12,7 @@ interface DBProfile {
 
 interface DBShare {
   user_id: string
-  profiles: DBProfile | DBProfile[] | null // Supabase puede devolver array o single en joins
+  profiles: DBProfile | DBProfile[] | null
 }
 
 // Estructura cruda del Recurso en DB
@@ -21,7 +21,7 @@ interface DBResource {
   title: string
   description: string | null
   url: string
-  type: 'link' | 'file' // Ajusta según tus valores reales en DB
+  type: 'link' | 'file'
   file_type?: string | null
   file_url?: string | null
   file_path?: string | null
@@ -29,12 +29,13 @@ interface DBResource {
   category: string | null
   tags: string[] | null
   created_at: string
-  user_id: string        // O created_by, revisa tu columna real
-  created_by?: string    // A veces se llama así
+  updated_at: string | null // Puede ser null en DB, lo manejamos en el map
+  user_id: string        
+  created_by?: string    
   folder_id: string | null
   is_public: boolean
   
-  // Relaciones
+  // Relaciones (Joins de Supabase)
   profiles: DBProfile | DBProfile[] | null
   resource_shares: DBShare[] | null
 }
@@ -58,6 +59,7 @@ interface DBFavorite {
 
 export async function getDashboardData(supabase: SupabaseClient, userId: string) {
   
+  // Ejecutamos las 3 consultas en paralelo para mayor velocidad
   const [resourcesRes, foldersRes, favsRes] = await Promise.all([
     supabase
       .from('resources')
@@ -75,39 +77,39 @@ export async function getDashboardData(supabase: SupabaseClient, userId: string)
     supabase.from('favorites').select('resource_id').eq('user_id', userId)
   ])
 
+  // Manejo de error temprano
   if (resourcesRes.error) throw new Error(resourcesRes.error.message)
 
-  // CASTING SEGURO: Usamos 'unknown' como paso intermedio para evitar el error de linter.
-  // Esto le dice a TS: "Confía en mí, la data tiene esta forma".
+  // CASTING SEGURO: Convertimos la respuesta genérica a nuestros tipos estrictos
   const rawResources = (resourcesRes.data || []) as unknown as DBResource[]
   const rawFolders = (foldersRes.data || []) as unknown as DBFolder[]
   const favRaw = (favsRes.data || []) as unknown as DBFavorite[]
   
+  // Creamos un Set para búsqueda O(1) de favoritos
   const favSet = new Set(favRaw.map(f => f.resource_id))
 
-  // --- FILTRADO DE RECURSOS ---
-  // Aquí es donde tenías el error. Ahora 'res' está tipado explícitamente.
+  // --- FILTRADO DE RECURSOS (Lógica de Negocio) ---
   const validResources = rawResources.filter((res: DBResource) => {
-    // Normalizamos el ID del creador (maneja user_id o created_by)
+    // Normalizamos el ID del creador
     const creatorId = res.created_by || res.user_id;
 
-    // A. Es mío
+    // 1. Es mío
     if (creatorId === userId) return true;
     
-    // B. Es Público
+    // 2. Es Público
     if (res.is_public) return true;
 
-    // C. Compartido Conmigo
+    // 3. Compartido Conmigo
     const shares = res.resource_shares || [];
-    // 's' ahora es DBShare, no any
     const isSharedWithMe = shares.some((s: DBShare) => s.user_id === userId);
     
     return isSharedWithMe;
   })
 
-  // --- MAPEO A FRONTEND ---
+  // --- MAPEO A FRONTEND (Transformación de Datos) ---
   const finalResources: ResourceWithRelations[] = validResources.map((res: DBResource) => {
-    // Helper para normalizar perfil (array o objeto)
+    
+    // Helper para evitar errores si profiles viene como array o null
     const normalizeProfile = (p: DBProfile | DBProfile[] | null): ResourceProfile | null => {
         if (Array.isArray(p)) return p[0] || null;
         return p;
@@ -119,10 +121,14 @@ export async function getDashboardData(supabase: SupabaseClient, userId: string)
       profiles: normalizeProfile(s.profiles)
     }));
 
-    // Determinar URL final (prioridad link o file_url)
+    // Determinar URL y Tipo final
     const finalUrl = res.url || res.file_url || '#';
     const finalType = res.type === 'link' ? 'link' : (res.file_type || 'file');
+    
+    // ID del creador seguro
+    const creatorId = res.created_by || res.user_id;
 
+    // Construcción del objeto final compatible con ResourceWithRelations
     return {
       id: res.id,
       title: res.title,
@@ -134,6 +140,11 @@ export async function getDashboardData(supabase: SupabaseClient, userId: string)
       category: res.category || 'General',
       tags: res.tags,
       created_at: res.created_at,
+      
+      // SOLUCIÓN CRÍTICA APLICADA:
+      updated_at: res.updated_at || res.created_at, // Si no hay update, usa create
+      created_by: creatorId, 
+      
       folder_id: res.folder_id,
       is_public: res.is_public,
       is_favorite: favSet.has(res.id),
@@ -143,7 +154,6 @@ export async function getDashboardData(supabase: SupabaseClient, userId: string)
   })
 
   // --- FILTRADO DE CARPETAS ---
-  // Ahora 'f' es DBFolder, no any
   const finalFolders = rawFolders.filter((f: DBFolder) => {
     if (f.category === 'Globales' || f.is_global) return true
     if (f.user_id === userId) return true
