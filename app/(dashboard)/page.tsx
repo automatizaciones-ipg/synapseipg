@@ -127,12 +127,18 @@ export default async function DashboardPage() {
     // --- FILTRADO DE CARPETAS ---
     const rawFolders = (foldersRes.data || []) as FolderType[];
     
+    // 🔥 CORRECCIÓN CRÍTICA DE VISIBILIDAD 🔥
+    // Aquí es donde se bloqueaba la vista de carpetas ajenas.
+    // Lo hemos simplificado para permitir el modo "WIKI TOTAL".
     const validFolders = rawFolders.filter((f) => {
+        // 1. Filtramos SIEMPRE las carpetas de sistema (vistas técnicas)
         if (['shared_view', 'favorites_view'].includes(f.category || '')) return false;
-        if (f.user_id === user.id) return true;
-        if (f.is_global) return true;
-        if (f.category && f.category.trim() !== '') return true;
-        return false;
+
+        // 2. MODO WIKI: 
+        // Si no es una carpeta de sistema, LA MOSTRAMOS.
+        // No importa si es tuya o no, ni si es global o no.
+        // Al mostrarse aquí, podrás verla en pantalla y, gracias al script de DB, podrás editarla/borrarla.
+        return true;
     });
 
     return (

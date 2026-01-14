@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch"
 import { Loader2, Sparkles, Save, Folder, Lock, AlertCircle, Globe } from 'lucide-react' 
 
 // Componentes internos
-import { FolderSelector } from "@/components/resources/folder-selector"
+import { FolderSelector } from "@/components/resources/folder-selector" 
 import { MemberSelector } from './member-selector'
 import { GroupSelector } from './group-selector'
 
@@ -25,25 +25,21 @@ export function ResourceForm({
   selectedFolderId, setSelectedFolderId, selectedFolderName, setSelectedFolderName, isAdmin
 }: ResourceFormProps) {
 
-  // --- LÓGICA VISUAL (Renderizado Puro) ---
-  
-  // El estado de verdad viene del Padre (NewResourcePage).
-  // Como inicializamos en el padre is_public: true, esto arrancará encendido.
+  // --- LÓGICA VISUAL ---
   const visualIsPublic = formData.is_public;
 
-  // UBICACIÓN: Si no hay ID de carpeta, es ESTRICTAMENTE "Inicio (Raíz)".
-  const visualLocationName = (!selectedFolderId || selectedFolderId === 'root') 
-    ? 'Inicio (Raíz)' 
-    : selectedFolderName;
+  // Calculamos el nombre visual una sola vez.
+  const visualLocationName = (selectedFolderName && selectedFolderName !== 'Inicio') 
+    ? selectedFolderName 
+    : 'Inicio (Raíz)';
 
-  // Lógica de visualización de permisos
   const hasUsers = selectedUsers.length > 0;
   const hasGroups = selectedGroups.length > 0;
 
   return (
     <Card className="border-blue-100 shadow-md h-fit">
       
-      {/* Header con botón de IA */}
+      {/* Header */}
       <CardHeader className="bg-slate-50/50 border-b border-slate-100 pb-4 flex flex-row items-center justify-between">
         <CardTitle className="text-base font-semibold text-slate-800 flex items-center gap-2">
             {isFile ? <Folder className="w-4 h-4 text-blue-500" /> : <Globe className="w-4 h-4 text-blue-500" />}
@@ -88,13 +84,16 @@ export function ResourceForm({
              <FolderSelector 
                currentFolderId={selectedFolderId}
                currentCategory={formData.category}
+               // Pasamos el nombre visual explícito para que el botón no cambie erráticamente
+               currentFolderName={visualLocationName}
+               
                onSelect={(id, name, category) => {
                  setSelectedFolderId(id)
                  setSelectedFolderName(name)
                  
-                 // Al seleccionar carpeta, solo actualizamos categoría si no es raíz ni globales
+                 // Lógica: La carpeta IMPONE la categoría
                  if (category && category !== 'Globales') {
-                    setFormData({ ...formData, category: category })
+                   setFormData({ ...formData, category: category })
                  }
                }}
                isAdmin={isAdmin} 
@@ -108,19 +107,30 @@ export function ResourceForm({
         {/* Categoría y Tags */}
         <div className="grid grid-cols-2 gap-4">
            <div className="space-y-2">
-             <Label>Categoría <span className="text-red-500">*</span></Label>
+             {/* FIX: Label indica que es automático */}
+             <Label className="flex items-center gap-1.5">
+                Categoría 
+                <Lock className="w-3 h-3 text-slate-400" />
+             </Label>
+             
+             {/* FIX: Select con disabled={true} para bloquear manual, pero mantiene value vinculado */}
              <Select 
+               disabled={true}
                value={formData.category} 
                onValueChange={(val) => setFormData({ ...formData, category: val })}
              >
-               <SelectTrigger className="bg-white"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+               <SelectTrigger className="bg-slate-100 text-slate-600 cursor-not-allowed border-slate-200">
+                 <SelectValue placeholder="Seleccionar..." />
+               </SelectTrigger>
                <SelectContent>
                  {CATEGORIES.map((cat) => (
                     <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                  ))}
                </SelectContent>
              </Select>
+             <p className="text-[10px] text-slate-400">Se asigna según la carpeta.</p>
            </div>
+
            <div className="space-y-2">
              <Label>Tags</Label>
              <Input 
@@ -144,10 +154,9 @@ export function ResourceForm({
           />
         </div>
 
-        {/* Separador */}
         <div className="h-px bg-slate-100 my-2" />
 
-        {/* SWITCH MANUAL DE VISIBILIDAD */}
+        {/* Visibilidad */}
         <div className="flex items-center justify-between bg-slate-50 p-4 rounded-lg border border-slate-200">
             <div className="space-y-0.5">
                 <Label className="text-sm font-bold text-slate-800">Visibilidad Global</Label>
@@ -165,7 +174,7 @@ export function ResourceForm({
             />
         </div>
 
-        {/* Configuración de Acceso (SOLO SI EL SWITCH ESTÁ APAGADO) */}
+        {/* Permisos */}
         {!visualIsPublic && (
             <div className="pt-2 border-t border-slate-100 space-y-4 animate-in fade-in slide-in-from-top-2">
                 <div className="flex items-center gap-2 text-amber-600 bg-amber-50 p-2 rounded text-xs border border-amber-100">
@@ -173,7 +182,6 @@ export function ResourceForm({
                     <span>Configura quién tiene acceso (Grupos O Usuarios).</span>
                 </div>
                 
-                {/* Contenedor Grupos */}
                 <div className={hasUsers ? "opacity-50 pointer-events-none grayscale transition-all" : "transition-all"}>
                    <Label className="text-xs font-bold text-slate-500 uppercase">Grupos</Label>
                    <div className="bg-[#1f64fc]/5 p-3 rounded-lg border border-[#1f64fc]/10 mt-1">
@@ -181,7 +189,6 @@ export function ResourceForm({
                    </div>
                 </div>
 
-                {/* Contenedor Usuarios */}
                 <div className={hasGroups ? "opacity-50 pointer-events-none grayscale transition-all" : "transition-all"}>
                    <Label className="text-xs font-bold text-slate-500 uppercase">Usuarios Individuales</Label>
                    <div className="bg-slate-50/30 p-3 rounded-lg border border-slate-100 mt-1">
@@ -191,7 +198,7 @@ export function ResourceForm({
             </div>
         )}
 
-        {/* INDICADOR VISUAL FINAL */}
+        {/* Indicador Visual Final */}
         <div className={`rounded-lg p-3 border flex items-start gap-3 transition-colors duration-300 ${visualIsPublic ? 'bg-blue-50/50 border-blue-100' : 'bg-amber-50/50 border-amber-100'}`}>
           {visualIsPublic ? (
               <>
@@ -220,9 +227,9 @@ export function ResourceForm({
 
         {/* Botón Guardar */}
         <Button 
-            className="w-full bg-[#1f64fc] hover:bg-[#155dfc] mt-2 shadow-lg shadow-[#1f64fc]/20" 
-            onClick={onSave} 
-            disabled={loading}
+          className="w-full bg-[#1f64fc] hover:bg-[#155dfc] mt-2 shadow-lg shadow-[#1f64fc]/20" 
+          onClick={onSave} 
+          disabled={loading}
         >
           {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
           {isFile ? "Subir y Guardar" : "Guardar Recurso"}

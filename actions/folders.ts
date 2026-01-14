@@ -23,7 +23,7 @@ export type ActionResponse<T = null> = {
 }
 
 // ---------------------------------------------------------
-// 1. CREAR CARPETA (Ahora crea todo como global por defecto)
+// 1. CREAR CARPETA
 // ---------------------------------------------------------
 export async function createFolder(
   name: string, 
@@ -48,7 +48,9 @@ export async function createFolder(
       name,
       parent_id: parentId,
       user_id: user.id,
-      is_global: true, // Guardamos siempre como true para mantener orden, pero ya no afectará la lectura
+      // CORRECCIÓN: Usamos el valor del argumento para respetar tu decisión de UI
+      // Si marcas el checkbox es Global, si no, es "Normal" (pero igual será editable por todos gracias a RLS)
+      is_global: isGlobal, 
       category: finalCategory 
     })
     .select('*')
@@ -64,51 +66,39 @@ export async function createFolder(
 }
 
 // ---------------------------------------------------------
-// 2. OBTENER CARPETAS (MODO: TODO PÚBLICO)
-
-
+// 2. OBTENER CARPETAS (MODO: TODO PÚBLICO / WIKI)
+// ---------------------------------------------------------
 export async function getFolders(
   parentId: string | null, 
-  isGlobalTab: boolean, // Mantenemos el argumento para no romper llamadas, pero no lo usaremos para restringir
+  isGlobalTab: boolean, 
   categoryInput: string | null = null 
 ): Promise<ActionResponse<FolderRow[]>> {
   const supabase = await createClient()
   
-  // Solo verificamos que esté logueado, no quién es.
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, data: [] }
 
-  // 1. Consulta limpia: Trae todo
+  // 1. Consulta limpia
   let query = supabase
     .from('folders')
     .select('*')
     .order('name')
 
   // 2. Filtro de Carpeta Padre (Navegación)
-  // Fundamental para entrar y salir de carpetas
   if (parentId) {
     query = query.eq('parent_id', parentId)
   } else {
     query = query.is('parent_id', null)
   }
 
-  // 3. Filtro de Pestañas (Visualización)
-  // Esto solo organiza visualmente, no oculta por seguridad
+  // 3. Filtro de Categoría
   if (categoryInput && categoryInput !== "Todos" && categoryInput !== "Globales") {
-      // Si el usuario clicó "RRHH", mostramos carpetas de RRHH
+      // Si estamos en una categoría específica (ej: RRHH), filtramos por ella
       query = query.eq('category', categoryInput)
   } else {
-      // Si está en Inicio/Globales/Todos, mostramos:
-      // a) Las que dicen 'General' (que seteamos en el SQL)
-      // b) O las que sean NULL (por si acaso)
-      // c) O las que sean Globales
-      // Para simplificar al máximo y ver TODO en el inicio:
-      
-      // Opción A: Si quieres ver ABSOLUTAMENTE TODO en el inicio mezclado:
-      // (No agregues ningún filtro .eq más aquí)
-      
-      // Opción B (Recomendada): Mostrar solo las de nivel raíz que no son de una categoría específica
-      // Como en el SQL pusimos 'General' a las vacías, filtramos por eso o NULL.
+      // Si estamos en Inicio/Todos:
+      // Mostramos las que NO tienen categoría o son "General".
+      // NO filtramos por usuario. Queremos ver las carpetas de TODOS.
       query = query.or('category.is.null,category.eq.General,category.eq.""')
   }
 

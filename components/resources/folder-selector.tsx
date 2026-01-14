@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { 
   Folder, FolderOpen, ChevronRight, Plus, ChevronLeft, Loader2, Home, 
-  Globe, Megaphone, FolderTree, Building2, Users, GraduationCap, Wallet, Rocket, LucideIcon
+  Megaphone, FolderTree, Building2, Users, GraduationCap, Wallet, Rocket, LucideIcon
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,17 +11,16 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
-// Asegúrate de que los imports coincidan con tu estructura exacta
 import { createFolder, getFolders } from '@/actions/folders' 
 
 // --- Tipos Locales ---
 interface FolderRow {
-    id: string
-    name: string
-    parent_id: string | null
-    category: string | null
-    created_at?: string
-    is_global?: boolean 
+  id: string
+  name: string
+  parent_id: string | null
+  category: string | null
+  created_at?: string
+  is_global?: boolean 
 }
 
 interface VirtualRoot {
@@ -41,12 +40,14 @@ interface NavItem {
 interface FolderSelectorProps {
   onSelect: (folderId: string | null, folderName: string, category: string) => void
   currentFolderId: string | null
-  currentCategory: string
+  // Usamos esto para filtrar dentro del modal
+  currentCategory: string 
+  // Texto explícito para el botón
+  currentFolderName?: string 
   isAdmin: boolean
 }
 
 // --- Constantes Visuales para Categorías Raíz ---
-// "Globales" eliminado para que INICIO sea la única raíz lógica para archivos generales.
 const SYSTEM_ROOTS: VirtualRoot[] = [
   { id: 'root-comms', name: 'Comunicaciones', category: 'Comunicaciones', icon: Megaphone },
   { id: 'root-adm', name: 'Admisión', category: 'Admisión', icon: FolderTree },
@@ -57,7 +58,7 @@ const SYSTEM_ROOTS: VirtualRoot[] = [
   { id: 'root-dev', name: 'Desarrollo', category: 'Desarrollo', icon: Rocket },
 ]
 
-export function FolderSelector({ onSelect, currentFolderId, currentCategory, isAdmin }: FolderSelectorProps) {
+export function FolderSelector({ onSelect, currentFolderId, currentCategory, currentFolderName, isAdmin }: FolderSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [path, setPath] = useState<NavItem[]>([]) 
   const [folders, setFolders] = useState<FolderRow[]>([])
@@ -68,21 +69,22 @@ export function FolderSelector({ onSelect, currentFolderId, currentCategory, isA
   const [newFolderName, setNewFolderName] = useState("")
   const [selectedInModal, setSelectedInModal] = useState<string | null>(null)
 
-  // 1. Determinar contexto actual (Padre y Categoría)
+  // 1. Determinar contexto actual
   const getContext = useCallback(() => {
     const last = path[path.length - 1]
+    
+    // Si no hay path, estamos en la selección de Raíces Virtuales
     if (!last) return { parentId: null, category: null, isRoot: true }
     
-    // Si es virtual, filtramos por su categoría
+    // Si es virtual, filtramos por su categoría pero parentId es null
     if (last.is_virtual) return { parentId: null, category: last.category, isRoot: false }
     
-    // Si es real, filtramos por su ID (la categoría se hereda visualmente)
+    // Si es una carpeta real
     return { parentId: last.id, category: last.category, isRoot: false }
   }, [path])
 
   // 2. Cargar carpetas
   const loadData = useCallback(async () => {
-    // Si estamos en la raíz absoluta (sin path), no cargamos nada (mostramos las raíces virtuales)
     if (path.length === 0) {
       setFolders([])
       return
@@ -92,12 +94,7 @@ export function FolderSelector({ onSelect, currentFolderId, currentCategory, isA
     const ctx = getContext()
 
     try {
-      console.log('📂 [FolderSelector] Fetching:', ctx)
-      
-      // ✅ API FIX: Pasamos los 3 argumentos requeridos por tu backend
       const res = await getFolders(ctx.parentId, true, ctx.category || null)
-      
-      // ✅ API FIX: Verificamos 'success' en lugar de 'error'
       if (res.success && Array.isArray(res.data)) {
         setFolders(res.data as FolderRow[])
       } else {
@@ -126,8 +123,10 @@ export function FolderSelector({ onSelect, currentFolderId, currentCategory, isA
     const categoryToSave = ctx.category || 'Globales'
 
     try {
-        // ✅ API FIX: Pasamos los 4 argumentos requeridos
-        const res = await createFolder(newFolderName, ctx.parentId, true, categoryToSave)
+        // --- AQUÍ ESTÁ EL FIX QUIRÚRGICO ---
+        // Cambiamos 'true' (global) a 'false' (no global/usuario).
+        // Esto permite que aparezcan los "..." para editar/eliminar.
+        const res = await createFolder(newFolderName, ctx.parentId, false, categoryToSave)
         
         if (res.success) {
             toast.success("Carpeta creada correctamente")
@@ -145,7 +144,7 @@ export function FolderSelector({ onSelect, currentFolderId, currentCategory, isA
 
   // 4. Confirmar Selección
   const handleConfirm = () => {
-    // CASO A: Selección explícita de una sub-carpeta (Highlight azul)
+    // CASO A: Selección explícita
     if (selectedInModal) {
       const folder = folders.find(f => f.id === selectedInModal)
       if (folder) {
@@ -155,10 +154,9 @@ export function FolderSelector({ onSelect, currentFolderId, currentCategory, isA
       }
     }
 
-    // CASO B: Guardar en la ubicación actual del breadcrumb (Path)
+    // CASO B: Ubicación actual del breadcrumb
     if (path.length > 0) {
       const current = path[path.length - 1]
-      
       if (current.is_virtual) {
         onSelect(null, `${current.name} (Raíz)`, current.category)
       } else {
@@ -168,8 +166,7 @@ export function FolderSelector({ onSelect, currentFolderId, currentCategory, isA
       return
     }
 
-    // CASO C: Guardar en INICIO (Raíz Absoluta)
-    // ✅ ROOT = INICIO: Si no hay path ni selección, es Inicio (Categoría 'Globales' por defecto).
+    // CASO C: Inicio
     if (path.length === 0 && !selectedInModal) {
         onSelect(null, "Inicio", "Globales") 
         setIsOpen(false)
@@ -179,10 +176,8 @@ export function FolderSelector({ onSelect, currentFolderId, currentCategory, isA
     toast.error("Por favor selecciona una ubicación válida")
   }
 
-  // Texto dinámico para el botón trigger
-  const triggerLabel = currentFolderId 
-    ? "Carpeta Seleccionada" 
-    : (currentCategory === 'General' || !currentCategory ? "Inicio (Raíz)" : `${currentCategory} (Raíz)`)
+  // Label del botón basado en prop visual
+  const triggerLabel = currentFolderName || "Inicio (Raíz)";
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -206,7 +201,7 @@ export function FolderSelector({ onSelect, currentFolderId, currentCategory, isA
           </DialogTitle>
         </DialogHeader>
 
-        {/* NAVEGACIÓN (Breadcrumbs) */}
+        {/* Breadcrumbs */}
         <div className="bg-slate-50 px-3 py-2 border-b overflow-x-auto whitespace-nowrap shrink-0 shadow-inner">
             <div className="flex items-center gap-1 text-sm">
                  <button 
@@ -237,7 +232,7 @@ export function FolderSelector({ onSelect, currentFolderId, currentCategory, isA
             </div>
         </div>
 
-        {/* LISTA DE CARPETAS - ✅ CON SCROLL AREA */}
+        {/* Lista */}
         <ScrollArea className="flex-1 bg-white p-2 h-[300px]">
             {loading && (
                 <div className="flex flex-col items-center justify-center py-12 gap-2 text-slate-400">
@@ -246,7 +241,6 @@ export function FolderSelector({ onSelect, currentFolderId, currentCategory, isA
                 </div>
             )}
 
-            {/* Vista Raíz (Categorías Virtuales) */}
             {!loading && path.length === 0 && (
                 <div className="grid grid-cols-1 gap-1 animate-in fade-in zoom-in-95 duration-300">
                     {SYSTEM_ROOTS.map(root => (
@@ -265,7 +259,6 @@ export function FolderSelector({ onSelect, currentFolderId, currentCategory, isA
                 </div>
             )}
 
-            {/* Vista Carpeta Interna */}
             {!loading && path.length > 0 && (
                 <div className="space-y-1 animate-in slide-in-from-right-4 duration-300">
                     <button 
@@ -292,7 +285,6 @@ export function FolderSelector({ onSelect, currentFolderId, currentCategory, isA
                             key={f.id}
                             onClick={() => setSelectedInModal(f.id)}
                             onDoubleClick={() => { 
-                                // Navegar más profundo
                                 setPath(prev => [...prev, { id: f.id, name: f.name, category: f.category || 'Globales', is_virtual: false }]); 
                                 setSelectedInModal(null); 
                             }}
@@ -312,7 +304,7 @@ export function FolderSelector({ onSelect, currentFolderId, currentCategory, isA
             )}
         </ScrollArea>
 
-        {/* FOOTER DE ACCIONES */}
+        {/* Footer */}
         <div className="p-4 border-t bg-slate-50 shrink-0 z-10">
              {isCreating ? (
                 <div className="flex gap-2 w-full animate-in slide-in-from-bottom-2 fade-in">
@@ -329,7 +321,6 @@ export function FolderSelector({ onSelect, currentFolderId, currentCategory, isA
                 </div>
              ) : (
                 <div className="flex justify-between items-center gap-3">
-                    {/* Botón Nueva Carpeta visible si hay path o si es admin (adaptado a tu lógica) */}
                     {(path.length > 0 || isAdmin) ? (
                         <Button variant="ghost" size="sm" onClick={() => setIsCreating(true)} className="text-slate-600 hover:text-blue-600 hover:bg-blue-50 transition-colors">
                             <Plus className="w-4 h-4 mr-1.5" /> Nueva Carpeta
@@ -339,8 +330,6 @@ export function FolderSelector({ onSelect, currentFolderId, currentCategory, isA
                     <Button 
                         onClick={handleConfirm} 
                         className={cn("bg-blue-600 hover:bg-blue-700 flex-1 shadow-md shadow-blue-900/10 transition-all")}
-                        // ✅ BOTONES: Siempre habilitado para permitir guardar en raíz
-                        disabled={false}
                     >
                         {selectedInModal 
                             ? 'Seleccionar Carpeta' 

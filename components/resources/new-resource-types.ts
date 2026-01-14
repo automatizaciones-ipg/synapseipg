@@ -52,10 +52,8 @@ export interface ResourceFormProps {
 export const CATEGORIES = [
   "Comunicaciones", 
   "Admisión", 
-  "Inducción", 
   "Secretaría General",
-  "RRHH",
-  "Finanzas", 
+  "Gestión de Personas",
   "Asuntos Académicos", 
   "Asuntos Económicos & Administrativos",
   "Desarrollo",
