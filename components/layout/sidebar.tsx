@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button'
 import { useSidebarStore } from '@/hooks/use-sidebar-store'
 import { 
   LayoutDashboard, 
-  FolderOpen, 
   Users, 
   Settings, 
   LogOut, 
@@ -16,11 +15,9 @@ import {
   Menu,
   Zap,
   Heart,
-  FolderPlus,
-  Briefcase
-
+  Briefcase,
+  Trash2
 } from 'lucide-react'
-import { Share2 } from "lucide-react"
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import {
@@ -31,11 +28,10 @@ import {
   SheetTitle
 } from "@/components/ui/sheet"
 import { useState } from 'react'
-import { motion } from 'framer-motion' // ✅ Importamos Framer Motion
+import { motion } from 'framer-motion'
 
 const sidebarItems = [
   { icon: LayoutDashboard, label: 'Inicio', href: '/' },
-  //{ icon: FolderOpen, label: 'Mis Recursos', href: '/my-resources' },
   { icon: Heart, label: 'Favoritos', href: '/favorites' },
   { icon: Users, label: 'Compartidos', href: '/shared' },
   { icon: Briefcase, label: 'Grupos de Trabajo', href: '/groups' },
@@ -141,8 +137,30 @@ export function Sidebar() {
         </div>
       </nav>
 
-      {/* Footer (Logout + Credits) */}
-      <div className="p-3 border-t border-slate-800 space-y-4">
+      {/* Footer (Trash + Logout + Credits) */}
+      <div className="p-3 border-t border-slate-800 space-y-2"> {/* space-y-2 para que estén agrupados pero separados */}
+        
+        {/* 🔥 PAPELERA AGREGADA AQUÍ - DISEÑO IDÉNTICO A NAV ITEMS 🔥 */}
+        <Link href="/trash" className="block group">
+            <div className={cn(
+                "flex items-center rounded-lg transition-all duration-200 relative overflow-hidden",
+                isCollapsed ? "justify-center p-3" : "px-4 py-3 gap-3",
+                pathname === '/trash' 
+                ? "bg-gradient-to-r from-blue-900/50 to-blue-800/20 text-blue-100 before:absolute before:left-0 before:top-0 before:h-full before:w-1 before:bg-blue-500" 
+                : "text-slate-400 hover:text-white hover:bg-slate-800/50"
+            )}>
+                <Trash2 className={cn("w-5 h-5 transition-colors", pathname === 'trash' && "text-blue-400")} />
+                {!isCollapsed && <span className="text-sm font-medium">Papelera</span>}
+                
+                {isCollapsed && (
+                    <div className="absolute left-14 bg-slate-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-nowrap border border-slate-700 shadow-xl">
+                    Papelera
+                    </div>
+                )}
+            </div>
+        </Link>
+
+        {/* LOGOUT */}
         <button 
           onClick={handleLogout}
           className={cn(
@@ -154,9 +172,9 @@ export function Sidebar() {
           {!isCollapsed && <span>Cerrar Sesión</span>}
         </button>
 
-        {/* --- CRÉDITOS AÑADIDOS AQUÍ --- */}
+        {/* CRÉDITOS */}
         {!isCollapsed && (
-           <div className="px-4 pb-2 text-[10px] text-slate-600 text-center animate-in fade-in">
+           <div className="px-4 pb-2 pt-2 text-[10px] text-slate-600 text-center animate-in fade-in">
                  <p>Synapse v0.18</p>
                  <p>Designed and developed by Luis Rivera Araya IPG</p>
            </div>
@@ -190,6 +208,7 @@ export function MobileSidebar() {
     const [open, setOpen] = useState(false)
     const supabase = createClient()
     const router = useRouter()
+    const pathname = usePathname() // Necesario para resaltar activo en mobile también
   
     async function handleLogout() {
         await supabase.auth.signOut()
@@ -206,7 +225,7 @@ export function MobileSidebar() {
             <SheetContent side="left" className="p-0 bg-[#0B1120] border-r-slate-800 w-72 text-white">
                 <SheetHeader className="p-6 text-left border-b border-slate-800">
                     <SheetTitle className="text-white flex items-center gap-2">
-                        {/* 🔥 LOGO ANIMADO TAMBIÉN EN MOBILE 🔥 */}
+                        {/* 🔥 LOGO ANIMADO MOBILE 🔥 */}
                         <motion.div 
                           className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center relative overflow-hidden"
                           animate={{ 
@@ -218,37 +237,60 @@ export function MobileSidebar() {
                           }}
                           transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
                         >
-                             <Zap className="w-5 h-5 text-white fill-current" />
+                              <Zap className="w-5 h-5 text-white fill-current" />
                         </motion.div>
                         Synapse Mobile
                     </SheetTitle>
                 </SheetHeader>
                 <div className="flex flex-col h-full pb-6">
                       <nav className="flex-1 px-3 py-4 space-y-2">
-                        {sidebarItems.map((item) => (
-                             <Link 
-                                key={item.href} 
-                                href={item.href} 
-                                onClick={() => setOpen(false)}
-                                className="block"
-                             >
-                                <div className="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/50">
-                                    <item.icon className="w-5 h-5" />
-                                    <span>{item.label}</span>
-                                </div>
-                             </Link>
-                        ))}
+                        {sidebarItems.map((item) => {
+                            const isActive = pathname === item.href
+                            return (
+                                <Link 
+                                    key={item.href} 
+                                    href={item.href} 
+                                    onClick={() => setOpen(false)}
+                                    className="block"
+                                >
+                                    <div className={cn(
+                                        "flex items-center gap-3 px-4 py-3 rounded-lg",
+                                        isActive 
+                                        ? "bg-slate-800 text-blue-400" 
+                                        : "text-slate-400 hover:text-white hover:bg-slate-800/50"
+                                    )}>
+                                        <item.icon className="w-5 h-5" />
+                                        <span>{item.label}</span>
+                                    </div>
+                                </Link>
+                            )
+                        })}
                       </nav>
-                      <div className="p-4 border-t border-slate-800 mt-auto space-y-4">
-                         <button onClick={handleLogout} className="flex items-center gap-3 w-full px-4 text-slate-400 hover:text-red-400 cursor-pointer">
+
+                      {/* Footer Mobile con Papelera */}
+                      <div className="p-4 border-t border-slate-800 mt-auto space-y-2">
+                          
+                          {/* Papelera Mobile */}
+                          <Link href="/trash" onClick={() => setOpen(false)}>
+                            <div className={cn(
+                                "flex items-center gap-3 px-4 py-3 rounded-lg mb-2 cursor-pointer",
+                                pathname === '/dashboard/trash' 
+                                ? "bg-slate-800 text-blue-400" 
+                                : "text-slate-400 hover:text-white hover:bg-slate-800/50"
+                            )}>
+                                <Trash2 className="w-5 h-5" />
+                                <span>Papelera</span>
+                            </div>
+                          </Link>
+
+                          <button onClick={handleLogout} className="flex items-center gap-3 w-full px-4 py-3 text-slate-400 hover:text-red-400 hover:bg-red-950/20 rounded-lg cursor-pointer transition-colors">
                              <LogOut className="w-5 h-5" /> Cerrar Sesión
-                         </button>
-                         
-                         {/* CRÉDITOS EN MOBILE TAMBIÉN */}
-                         <div className="px-4 text-[10px] text-slate-600 text-center">
-                            <p>Synapse v0.18</p>
-                            <p>Designed and developed by Luis Rivera Araya IPG</p>
-                         </div>
+                          </button>
+                          
+                          <div className="px-4 pt-4 text-[10px] text-slate-600 text-center">
+                             <p>Synapse v0.18</p>
+                             <p>Designed and developed by Luis Rivera Araya IPG</p>
+                          </div>
                       </div>
                 </div>
             </SheetContent>

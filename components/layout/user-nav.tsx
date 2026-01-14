@@ -22,8 +22,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { User } from '@supabase/supabase-js'
 
-// ✅ CORRECCIÓN: Definimos la función auxiliar AQUÍ (fuera del componente)
-// Así siempre existe antes de que el componente intente usarla.
+// ✅ UTILIDAD ROBUSTA: Extrae iniciales reales (Ej: "Juan Perez" -> "JP")
 function getInitials(name: string) {
   return name
     .match(/(\b\S)?/g)
@@ -35,24 +34,41 @@ function getInitials(name: string) {
 
 export function UserNav() {
   const [user, setUser] = useState<User | null>(null)
+  // Estado local para datos de perfil (más actualizado que la sesión)
+  const [profileData, setProfileData] = useState<{ full_name: string | null, avatar_url: string | null }>({
+     full_name: null,
+     avatar_url: null
+  })
   const [initials, setInitials] = useState("U")
+  
   const supabase = createClient()
   const router = useRouter()
 
-  // Obtener usuario al cargar
+  // Obtener usuario y perfil real al cargar
   useEffect(() => {
-    async function getUser() {
+    async function getUserAndProfile() {
+      // 1. Obtener sesión auth
       const { data: { user } } = await supabase.auth.getUser()
+      
       if (user) {
         setUser(user)
-        // Extraer iniciales del nombre (metadata) o usar email
-        const fullName = user.user_metadata.full_name || user.email || "U"
-        
-        // Ahora sí funciona porque getInitials ya está definida arriba
-        setInitials(getInitials(fullName))
+
+        // 2. Obtener datos frescos de la tabla profiles (Fuente de la Verdad)
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name, avatar_url')
+            .eq('id', user.id)
+            .single()
+
+        // Prioridad: Perfil DB > Metadata Auth > Email > "U"
+        const finalName = profile?.full_name || user.user_metadata.full_name || user.email || "Usuario"
+        const finalAvatar = profile?.avatar_url || user.user_metadata.avatar_url
+
+        setProfileData({ full_name: finalName, avatar_url: finalAvatar })
+        setInitials(getInitials(finalName))
       }
     }
-    getUser()
+    getUserAndProfile()
   }, [supabase])
 
   const handleSignOut = async () => {
@@ -66,7 +82,8 @@ export function UserNav() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="relative h-10 w-10 rounded-full">
           <Avatar className="h-10 w-10 border border-slate-200">
-            <AvatarImage src={user?.user_metadata.avatar_url} alt="Avatar" />
+            {/* Usamos el avatar de la base de datos */}
+            <AvatarImage src={profileData.avatar_url || undefined} alt="Avatar" className="object-cover" />
             <AvatarFallback className="bg-blue-100 text-blue-700 font-bold">
               {initials}
             </AvatarFallback>
@@ -77,7 +94,7 @@ export function UserNav() {
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
             <p className="text-sm font-medium leading-none">
-              {user?.user_metadata.full_name || "Usuario"}
+              {profileData.full_name || "Usuario"}
             </p>
             <p className="text-xs leading-none text-muted-foreground">
               {user?.email}
@@ -86,8 +103,8 @@ export function UserNav() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          <DropdownMenuItem onClick={() => router.push('/profile')}>
-            Perfil
+          <DropdownMenuItem onClick={() => router.push('/dashboard/settings')}>
+            Configuración
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />

@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Link2, Cloud, Loader2, Lock } from 'lucide-react'
 
-// Componentes
+// Componentes Internos
 import { ResourceForm } from '@/components/resources/resource-form'
 import { ResourcePreview } from '@/components/resources/resource-preview'
 import { ResourceFormData, MAX_FILE_SIZE, CATEGORIES } from '@/components/resources/new-resource-types'
@@ -26,29 +26,35 @@ export default function NewResourcePage() {
   const supabase = createClient()
 
   // 1. CAPTURAR CONTEXTO INICIAL
+  // Si venimos navegando desde una carpeta, capturamos su ID.
   const initialFolderId = searchParams.get('folderId')
 
   const [isMounted, setIsMounted] = useState(false)
   const [roleLoading, setRoleLoading] = useState(true)
   
+  // Tabs y Estados de Carga
   const [activeTab, setActiveTab] = useState("link") 
   const [loading, setLoading] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
   
+  // Inputs principales
   const [linkUrl, setLinkUrl] = useState("")
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   
+  // ESTADO DEL FORMULARIO
+  // is_public: true por defecto para evitar fricción y lógica inversa compleja.
   const [formData, setFormData] = useState<ResourceFormData>({
     title: "",
     description: "",
     category: "Otros",
     tags: "",
     color: "#3b82f6",
-    is_public: false
+    is_public: true, 
+    iconType: "file"
   })
 
-  // Selectores de permisos
+  // Selectores de permisos (Arrays de UUIDs)
   const [selectedUsers, setSelectedUsers] = useState<string[]>([])
   const [selectedGroups, setSelectedGroups] = useState<string[]>([])
   
@@ -56,9 +62,9 @@ export default function NewResourcePage() {
   // 2. GESTIÓN DE CARPETA SELECCIONADA (ESTADO ELEVADO)
   // ===========================================================================
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(initialFolderId || null)
-  const [selectedFolderName, setSelectedFolderName] = useState<string | null>("Carpeta Principal")
+  const [selectedFolderName, setSelectedFolderName] = useState<string | null>("Inicio (Raíz)")
 
-  // Efecto para obtener el nombre de la carpeta inicial si existe ID
+  // Efecto: Obtener nombre de la carpeta inicial si existe ID
   useEffect(() => {
     const fetchFolderName = async () => {
         if (!initialFolderId) return;
@@ -81,7 +87,7 @@ export default function NewResourcePage() {
   }, [initialFolderId, supabase])
 
 
-  // Inicialización de Usuario y Rol
+  // Efecto: Inicialización de Usuario y Rol (Admin Check)
   useEffect(() => {
     const initPage = async () => {
       try {
@@ -90,6 +96,7 @@ export default function NewResourcePage() {
             const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
             const userIsAdmin = profile?.role === 'admin'
             setIsAdmin(userIsAdmin)
+            // Si es admin, tab por defecto File, si no, Link
             if (userIsAdmin) setActiveTab("file")
             else setActiveTab("link")
         }
@@ -103,13 +110,14 @@ export default function NewResourcePage() {
     initPage()
   }, [supabase])
 
-  // --- LOGICA DE ANALISIS (IA) ---
+  // --- LOGICA DE ANALISIS CON IA (GEMINI) ---
   const handleAnalyzeLink = async () => {
     if (!linkUrl) return toast.error("Ingresa una URL primero")
     setAiLoading(true)
     try {
       const result = await analyzeLinkMetadata(linkUrl)
       if (result) {
+        // Normalización de categoría
         let matchedCategory = "Otros"
         if (result.category) {
             const found = CATEGORIES.find(c => c.toLowerCase() === result.category?.toLowerCase())
@@ -137,6 +145,7 @@ export default function NewResourcePage() {
   const handleAnalyzeFile = async (file: File) => {
     setAiLoading(true)
     try {
+        // Extraer nombre limpio del archivo
         const name = file.name.split('.').slice(0, -1).join('.')
         setFormData(prev => ({
             ...prev,
@@ -150,19 +159,18 @@ export default function NewResourcePage() {
     }
   }
 
-  // --- GUARDADO ---
+  // --- GUARDADO DEL RECURSO ---
   const handleSave = async () => {
-    // Validaciones
+    // 1. Validaciones Básicas de Integridad
     if (!formData.title) return toast.error("El título es obligatorio")
     if (activeTab === "link" && !linkUrl) return toast.error("Falta el enlace")
     if (activeTab === "file" && !selectedFile) return toast.error("Falta el archivo")
 
-    // Logs para verificar antes de enviar
-    console.group("💾 [PAGE] Intentando Guardar Recurso")
-    console.log("Título:", formData.title)
-    console.log("Folder ID seleccionado:", selectedFolderId)
-    console.log("Folder Name seleccionado:", selectedFolderName)
-    console.groupEnd()
+    // 2. Validación de Lógica de Negocio (Privacidad)
+    // Si NO es público, DEBE tener destinatarios.
+    if (!formData.is_public && selectedUsers.length === 0 && selectedGroups.length === 0) {
+        return toast.error("⚠️ Para un recurso privado, debes seleccionar al menos un Grupo o un Usuario.")
+    }
 
     setLoading(true)
     try {
@@ -170,11 +178,12 @@ export default function NewResourcePage() {
         let fileType = 'link'
         let fileSize = 0
 
-        // 1. Subida de Archivo (Storage)
+        // A. Subida de Archivo a Storage (si aplica)
         if (activeTab === "file" && selectedFile) {
             fileType = selectedFile.type
             fileSize = selectedFile.size
             const fileExt = selectedFile.name.split('.').pop()
+            // Nombre único para evitar colisiones
             const fileName = `${Math.random().toString(36).substring(7)}_${Date.now()}.${fileExt}`
             
             const { error: uploadError, data: uploadData } = await supabase.storage
@@ -185,10 +194,10 @@ export default function NewResourcePage() {
             filePath = uploadData.path
         }
 
-        // 2. Insert en DB
-        // IMPORTANTE: Aquí se pasa explícitamente selectedFolderId
+        // B. Inserción en Base de Datos (Server Action)
         const result = await saveResource({
             ...formData,
+            // Convertir string de tags a array
             tags: formData.tags.split(',').map(t => t.trim()).filter(Boolean),
             file_url: null, 
             file_path: filePath,
@@ -197,26 +206,35 @@ export default function NewResourcePage() {
             file_size: fileSize,
             shared_with: selectedUsers,
             shared_groups: selectedGroups,
-            folder_id: selectedFolderId // ✅ USANDO EL ESTADO ELEVADO
+            folder_id: selectedFolderId // Usamos el estado confirmado de la carpeta
         })
 
         if (!result.success) throw new Error(result.message)
 
         toast.success("Recurso publicado correctamente")
         
-        // 3. Redirección Inteligente
+        // C. Gestión de Estado Post-Guardado
+        // Guardamos el target en session para que el dashboard se abra ahí
         if (selectedFolderId) {
             sessionStorage.setItem('target_folder_open', selectedFolderId);
         }
 
-        // Hard Navigation para limpiar caches y forzar reload del Dashboard
+        // Hard Navigation para limpiar caches y asegurar consistencia
         window.location.href = '/';
         
     } catch (error: unknown) {
         let errorMessage = "Error desconocido al guardar"
         if (error instanceof Error) errorMessage = error.message
         else if (typeof error === 'string') errorMessage = error
-        toast.error(errorMessage)
+        
+        console.error("❌ Error Save Resource:", errorMessage)
+        
+        // Manejo específico del error de recursión para feedback al usuario
+        if (errorMessage.toLowerCase().includes("infinite recursion")) {
+             toast.error("Error Crítico de Base de Datos: Recursión en políticas. Contacta al administrador.")
+        } else {
+             toast.error(errorMessage)
+        }
     } finally {
         setLoading(false)
     }
@@ -229,10 +247,14 @@ export default function NewResourcePage() {
   }
 
   if (!isMounted || roleLoading) {
-    return <div className="flex items-center justify-center min-h-[60vh]"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>
+    return (
+        <div className="flex items-center justify-center min-h-[60vh]">
+            <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+        </div>
+    )
   }
 
-  // Props para el formulario, incluyendo el selector de carpetas
+  // Props empaquetadas para limpiar el JSX
   const formProps = {
     formData, setFormData,
     selectedUsers, setSelectedUsers,
@@ -240,7 +262,7 @@ export default function NewResourcePage() {
     onSave: handleSave,
     loading, aiLoading,
     selectedFolderId, setSelectedFolderId,
-    selectedFolderName: selectedFolderName || "Carpeta Principal",
+    selectedFolderName: selectedFolderName || "Inicio (Raíz)",
     setSelectedFolderName,
     isAdmin
   }
@@ -248,6 +270,7 @@ export default function NewResourcePage() {
   return (
     <div className="max-w-5xl mx-auto pb-10 space-y-8 animate-in fade-in duration-500">
       
+      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">Nuevo Recurso</h1>
@@ -260,6 +283,7 @@ export default function NewResourcePage() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         
+        {/* Selector de Tipo (Archivo vs Link) */}
         <div className="w-full bg-slate-100/50 p-1.5 rounded-lg mb-8">
             <TabsList className="grid w-full grid-cols-2 h-auto bg-transparent p-0 gap-2">
             {isAdmin ? (
@@ -283,25 +307,23 @@ export default function NewResourcePage() {
             </TabsList>
         </div>
 
-        {/* --- PESTAÑA ARCHIVO --- */}
-        {isAdmin && (
-            <TabsContent value="file" className="mt-0 animate-in fade-in slide-in-from-bottom-2 duration-500">
-             
-             {!selectedFile && (
+        {/* --- CONTENIDO: ARCHIVO --- */}
+        <TabsContent value="file" className="mt-0 animate-in fade-in slide-in-from-bottom-2 duration-500">
+            {activeTab === 'file' && isAdmin && (
+                !selectedFile ? (
+                // Estado Vacío (Upload Zone Grande)
                 <div className="max-w-3xl mx-auto py-8">
                       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8 transition-all hover:shadow-md">
                          <UploadZone onFileSelect={handleFileSelect} />
                       </div>
                 </div>
-             )}
-
-             {selectedFile && (
+                ) : (
+                // Estado con Archivo (Grid con Preview + Form)
                 <div className="grid lg:grid-cols-12 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
                     <div className="lg:col-span-7 space-y-6">
                         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 scale-95 opacity-80 hover:scale-100 hover:opacity-100 transition-all cursor-pointer">
                             <UploadZone onFileSelect={handleFileSelect} />
                         </div>
-
                         <div className="bg-slate-50/30 rounded-2xl p-6 border border-slate-100">
                             <Label className="text-slate-400 mb-5 block text-[10px] uppercase tracking-widest font-bold">Vista Previa</Label>
                              <ResourcePreview 
@@ -313,7 +335,6 @@ export default function NewResourcePage() {
                             />
                         </div>
                     </div>
-
                     <div className="lg:col-span-5">
                         <ResourceForm 
                             {...formProps} 
@@ -322,20 +343,21 @@ export default function NewResourcePage() {
                         />
                     </div>
                 </div>
-             )}
-            </TabsContent>
-        )}
+                )
+            )}
+        </TabsContent>
 
-        {/* --- PESTAÑA LINK --- */}
+        {/* --- CONTENIDO: LINK --- */}
         <TabsContent value="link" className="mt-0 animate-in fade-in slide-in-from-bottom-2 duration-500">
           <div className="grid lg:grid-cols-12 gap-8">
             <div className="lg:col-span-7 space-y-6">
+                
+                {/* Input de URL */}
                 <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-5">
                     <div className="flex flex-col space-y-1">
                         <Label className="text-base font-semibold text-slate-800">Enlace del Recurso</Label>
                         <p className="text-sm text-slate-500">Pega la URL para analizar su contenido automáticamente.</p>
                     </div>
-                    
                     <div className="relative">
                         <Link2 className="absolute left-4 top-3.5 h-5 w-5 text-slate-400" />
                         <Input 
@@ -347,6 +369,7 @@ export default function NewResourcePage() {
                     </div>
                 </div>
 
+                {/* Vista Previa Link */}
                 <div className="bg-slate-50/30 rounded-2xl p-6 border border-slate-100">
                       <Label className="text-slate-400 mb-5 block text-[10px] uppercase tracking-widest font-bold">Vista Previa</Label>
                       <ResourcePreview 
@@ -359,6 +382,7 @@ export default function NewResourcePage() {
                 </div>
             </div>
             
+            {/* Formulario Lateral */}
             <div className="lg:col-span-5">
                 <ResourceForm 
                       {...formProps}

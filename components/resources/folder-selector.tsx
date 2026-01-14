@@ -11,7 +11,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
-// Asegúrate de que estas rutas sean correctas en tu proyecto
+// Asegúrate de que los imports coincidan con tu estructura exacta
 import { createFolder, getFolders } from '@/actions/folders' 
 
 // --- Tipos Locales ---
@@ -21,6 +21,7 @@ interface FolderRow {
     parent_id: string | null
     category: string | null
     created_at?: string
+    is_global?: boolean 
 }
 
 interface VirtualRoot {
@@ -38,16 +39,15 @@ interface NavItem {
 }
 
 interface FolderSelectorProps {
-  // Callback robusto: Devuelve ID, Nombre y la Categoría obligatoria
   onSelect: (folderId: string | null, folderName: string, category: string) => void
   currentFolderId: string | null
   currentCategory: string
   isAdmin: boolean
 }
 
-// --- Constantes ---
+// --- Constantes Visuales para Categorías Raíz ---
+// "Globales" eliminado para que INICIO sea la única raíz lógica para archivos generales.
 const SYSTEM_ROOTS: VirtualRoot[] = [
-  { id: 'root-global', name: 'Globales', category: 'Globales', icon: Globe },
   { id: 'root-comms', name: 'Comunicaciones', category: 'Comunicaciones', icon: Megaphone },
   { id: 'root-adm', name: 'Admisión', category: 'Admisión', icon: FolderTree },
   { id: 'root-sec', name: 'Secretaría General', category: 'Secretaría General', icon: Building2 },
@@ -93,9 +93,11 @@ export function FolderSelector({ onSelect, currentFolderId, currentCategory, isA
 
     try {
       console.log('📂 [FolderSelector] Fetching:', ctx)
-      // Ajuste para tu server action: getFolders(parentId, isGlobal, category)
-      const res = await getFolders(ctx.parentId, true, ctx.category || undefined)
       
+      // ✅ API FIX: Pasamos los 3 argumentos requeridos por tu backend
+      const res = await getFolders(ctx.parentId, true, ctx.category || null)
+      
+      // ✅ API FIX: Verificamos 'success' en lugar de 'error'
       if (res.success && Array.isArray(res.data)) {
         setFolders(res.data as FolderRow[])
       } else {
@@ -121,11 +123,10 @@ export function FolderSelector({ onSelect, currentFolderId, currentCategory, isA
       return
     }
 
-    // Fallback de seguridad: si no hay categoría, usamos Globales
     const categoryToSave = ctx.category || 'Globales'
 
     try {
-        console.log('✨ [FolderSelector] Creando:', { name: newFolderName, parent: ctx.parentId, category: categoryToSave })
+        // ✅ API FIX: Pasamos los 4 argumentos requeridos
         const res = await createFolder(newFolderName, ctx.parentId, true, categoryToSave)
         
         if (res.success) {
@@ -142,47 +143,55 @@ export function FolderSelector({ onSelect, currentFolderId, currentCategory, isA
     }
   }
 
-  // 4. Confirmar Selección (Lógica CRÍTICA)
+  // 4. Confirmar Selección
   const handleConfirm = () => {
-    // CASO A: Selección explícita de una sub-carpeta en la lista
+    // CASO A: Selección explícita de una sub-carpeta (Highlight azul)
     if (selectedInModal) {
       const folder = folders.find(f => f.id === selectedInModal)
       if (folder) {
-        console.log('✅ [Selector] Seleccionada sub-carpeta:', folder.name)
         onSelect(folder.id, folder.name, folder.category || 'Globales')
         setIsOpen(false)
         return
       }
     }
 
-    // CASO B: Guardar en la ubicación actual del path
+    // CASO B: Guardar en la ubicación actual del breadcrumb (Path)
     if (path.length > 0) {
       const current = path[path.length - 1]
       
       if (current.is_virtual) {
-        // Es una raíz (ej. "Comunicaciones")
-        console.log('✅ [Selector] Seleccionada Raíz Virtual:', current.name)
         onSelect(null, `${current.name} (Raíz)`, current.category)
       } else {
-        // Es una carpeta abierta donde estamos navegando
-        console.log('✅ [Selector] Guardando en carpeta actual:', current.name)
         onSelect(current.id, current.name, current.category)
       }
       setIsOpen(false)
       return
     }
 
+    // CASO C: Guardar en INICIO (Raíz Absoluta)
+    // ✅ ROOT = INICIO: Si no hay path ni selección, es Inicio (Categoría 'Globales' por defecto).
+    if (path.length === 0 && !selectedInModal) {
+        onSelect(null, "Inicio", "Globales") 
+        setIsOpen(false)
+        return
+    }
+
     toast.error("Por favor selecciona una ubicación válida")
   }
+
+  // Texto dinámico para el botón trigger
+  const triggerLabel = currentFolderId 
+    ? "Carpeta Seleccionada" 
+    : (currentCategory === 'General' || !currentCategory ? "Inicio (Raíz)" : `${currentCategory} (Raíz)`)
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
         <Button variant="outline" className="w-full justify-between text-slate-700 font-normal border-dashed border-slate-300 hover:border-blue-400 bg-white group transition-all">
            <span className="flex items-center gap-2 truncate">
-             {currentFolderId ? <FolderOpen className="w-4 h-4 text-blue-600 group-hover:text-blue-500" /> : <Globe className="w-4 h-4 text-slate-400 group-hover:text-blue-400" />}
+             {currentFolderId ? <FolderOpen className="w-4 h-4 text-blue-600 group-hover:text-blue-500" /> : <Home className="w-4 h-4 text-slate-400 group-hover:text-blue-400" />}
              <span className="truncate">
-                {currentFolderId ? "Carpeta Seleccionada" : `${currentCategory} (Raíz)`}
+                {triggerLabel}
              </span>
            </span>
            <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 group-hover:bg-blue-100 transition-colors">Cambiar</span>
@@ -202,9 +211,12 @@ export function FolderSelector({ onSelect, currentFolderId, currentCategory, isA
             <div className="flex items-center gap-1 text-sm">
                  <button 
                     onClick={() => { setPath([]); setSelectedInModal(null); }} 
-                    className="px-2 py-1 hover:bg-white rounded flex items-center gap-1 text-slate-500 font-bold text-xs uppercase tracking-wide border border-transparent hover:border-slate-200 transition-all"
+                    className={cn(
+                        "px-2 py-1 hover:bg-white rounded flex items-center gap-1 font-bold text-xs uppercase tracking-wide border border-transparent hover:border-slate-200 transition-all",
+                        path.length === 0 ? "text-blue-700 bg-blue-50 border-blue-100" : "text-slate-500"
+                    )}
                  >
-                    <Home className="w-3.5 h-3.5" /> ORG
+                    <Home className="w-3.5 h-3.5" /> INICIO
                  </button>
                  {path.map((item, idx) => (
                     <div key={idx} className="flex items-center animate-in fade-in slide-in-from-left-2 duration-200">
@@ -225,8 +237,8 @@ export function FolderSelector({ onSelect, currentFolderId, currentCategory, isA
             </div>
         </div>
 
-        {/* LISTA DE CARPETAS */}
-        <ScrollArea className="flex-1 bg-white p-2">
+        {/* LISTA DE CARPETAS - ✅ CON SCROLL AREA */}
+        <ScrollArea className="flex-1 bg-white p-2 h-[300px]">
             {loading && (
                 <div className="flex flex-col items-center justify-center py-12 gap-2 text-slate-400">
                     <Loader2 className="animate-spin text-blue-600 w-8 h-8" />
@@ -234,7 +246,7 @@ export function FolderSelector({ onSelect, currentFolderId, currentCategory, isA
                 </div>
             )}
 
-            {/* Vista Raíz */}
+            {/* Vista Raíz (Categorías Virtuales) */}
             {!loading && path.length === 0 && (
                 <div className="grid grid-cols-1 gap-1 animate-in fade-in zoom-in-95 duration-300">
                     {SYSTEM_ROOTS.map(root => (
@@ -317,7 +329,8 @@ export function FolderSelector({ onSelect, currentFolderId, currentCategory, isA
                 </div>
              ) : (
                 <div className="flex justify-between items-center gap-3">
-                    {path.length > 0 && isAdmin ? (
+                    {/* Botón Nueva Carpeta visible si hay path o si es admin (adaptado a tu lógica) */}
+                    {(path.length > 0 || isAdmin) ? (
                         <Button variant="ghost" size="sm" onClick={() => setIsCreating(true)} className="text-slate-600 hover:text-blue-600 hover:bg-blue-50 transition-colors">
                             <Plus className="w-4 h-4 mr-1.5" /> Nueva Carpeta
                         </Button>
@@ -325,10 +338,14 @@ export function FolderSelector({ onSelect, currentFolderId, currentCategory, isA
                     
                     <Button 
                         onClick={handleConfirm} 
-                        className={cn("bg-blue-600 hover:bg-blue-700 flex-1 shadow-md shadow-blue-900/10 transition-all", (!path.length && !selectedInModal) && "opacity-50 cursor-not-allowed")}
-                        disabled={path.length === 0 && !selectedInModal}
+                        className={cn("bg-blue-600 hover:bg-blue-700 flex-1 shadow-md shadow-blue-900/10 transition-all")}
+                        // ✅ BOTONES: Siempre habilitado para permitir guardar en raíz
+                        disabled={false}
                     >
-                        {selectedInModal ? 'Seleccionar Carpeta' : 'Guardar Aquí'}
+                        {selectedInModal 
+                            ? 'Seleccionar Carpeta' 
+                            : (path.length === 0 ? 'Guardar en Inicio' : 'Guardar Aquí')
+                        }
                     </Button>
                 </div>
              )}

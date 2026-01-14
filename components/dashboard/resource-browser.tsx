@@ -8,7 +8,7 @@ import { ResourceCard, ResourceWithRelations } from "@/components/dashboard/reso
 import { SearchInput } from "@/components/dashboard/search-input"
 import { CategoryFilter } from "@/components/dashboard/category-filter"
 import { Button } from "@/components/ui/button"
-// ✅ CORRECCIÓN: Se agrega 'FolderOpen' a los imports
+
 import { 
   Plus, LayoutGrid, List, Link2, Folder, ChevronRight, Home, ArrowLeft, 
   MoreVertical, Pencil, Trash2, X, Loader2, FolderPlus, Star, Share2, 
@@ -19,6 +19,7 @@ import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner" 
 import { updateFolder, deleteFolder, createFolder } from "@/actions/folders"
+import { deleteResource } from "@/actions/resources" 
 
 // ----------------------------------------------------------------------
 // 1. CONFIGURACIÓN Y TIPOS
@@ -80,8 +81,8 @@ export function ResourceBrowser({
   const isAdmin = userRole === 'admin'
   const isGlobalContext = browserContext === 'home'
   
-  // Definir pestaña por defecto
-  const defaultTab = isGlobalContext ? (isAdmin ? "Todos" : "Globales") : "Todos"
+  // ✅ CAMBIO DE LÓGICA: La pestaña por defecto ahora es "Inicio" (Raíz)
+  const defaultTab = isGlobalContext ? "Inicio" : "Todos"
 
   // --- ESTADOS ---
   const [searchTerm, setSearchTerm] = useState("")
@@ -113,10 +114,35 @@ export function ResourceBrowser({
   }, [resources.length, initialFolders.length, browserContext, userRole]);
 
   // ----------------------------------------------------------------------
-  // 3. LÓGICA DE FILTRADO (CORE)
+  // ✅ SOLUCIÓN ARQUITECTÓNICA: LISTA NEGRA TEMPORAL (EPHEMERAL BLACKLIST)
+  // ----------------------------------------------------------------------
+  // Almacena los IDs que el usuario quitó de favoritos pero el server aún no refresca.
+  const [hiddenResourceIds, setHiddenResourceIds] = useState<Set<string>>(new Set())
+
+  // Si 'resources' cambia (respuesta del servidor post-refresh), limpiamos la lista negra.
+  useEffect(() => {
+    setHiddenResourceIds(new Set())
+  }, [resources])
+
+  // Handler Optimista
+  const handleOptimisticUnfavorite = useCallback((resourceId: string, isNowFavorite: boolean) => {
+    // Solo aplicamos el ocultamiento visual si estamos en la vista de FAVORITOS
+    if (browserContext === 'favorites' && !isNowFavorite) {
+        setHiddenResourceIds(prev => {
+            const newSet = new Set(prev)
+            newSet.add(resourceId)
+            return newSet
+        })
+        router.refresh()
+    } else {
+        router.refresh()
+    }
+  }, [browserContext, router])
+
+  // ----------------------------------------------------------------------
+  // 3. LÓGICA DE FILTRADO (CORE ROBUSTO)
   // ----------------------------------------------------------------------
   
-  // Definir qué pestañas mostrar
   const tabsToRender = useMemo(() => {
     if (!isGlobalContext) return [];
     
@@ -131,14 +157,9 @@ export function ResourceBrowser({
     ];
 
     const sourceTabs = systemTabs.length > 0 ? systemTabs : fixedTabs;
-    
-    if (isAdmin) {
-        return ["Todos", "Globales", ...sourceTabs.map(t => t.category)];
-    }
-    return ["Globales", ...sourceTabs.map(t => t.category)];
-  }, [isGlobalContext, systemTabs, isAdmin]);
+    return ["Inicio", ...sourceTabs.map(t => t.category)];
+  }, [isGlobalContext, systemTabs]);
 
-  // Placeholder dinámico
   const searchPlaceholder = useMemo(() => {
     if (currentFolderId) {
        const currentFolderName = folderPath[folderPath.length - 1]?.name || "carpeta actual";
@@ -152,33 +173,35 @@ export function ResourceBrowser({
   }, [currentFolderId, folderPath, browserContext, selectedCategory]);
 
   /**
-   * ✅ CHECK SCOPE REFORZADO:
-   * Determina si un item debe mostrarse según la pestaña activa.
+   * ✅ CHECK SCOPE ROBUSTO (Exclusión Estricta para Inicio)
    */
-  const checkScope = useCallback((itemCategory: string | undefined | null, itemIsGlobal: boolean | number | undefined | null) => {
-      // 1. Contextos ajenos al HOME muestran todo (el filtrado lo hace la Page)
+  const checkScope = useCallback((itemCategory: string | undefined | null, itemIsGlobal: boolean | number | undefined | null, itemFolderId: string | null) => {
+      // 1. Contextos ajenos al HOME (Mine, Shared, Favorites) pasan directo (filtrado en Page)
       if (!isGlobalContext) return true;
       
-      // 2. Pestaña "Todos" (Admin)
-      if (selectedCategory === "Todos") return true;
-      
-      // 3. Pestaña "Globales": Muestra todo lo que tenga is_public=true
-      // IMPORTANTE: Ignoramos la categoría de texto aquí para que aparezcan aunque digan "RRHH"
-      if (selectedCategory === "Globales") {
-          return !!itemIsGlobal; 
+      // 2. Lógica para Pestañas de Sistema (Comunicaciones, RRHH, etc.)
+      if (selectedCategory !== "Inicio") {
+          return itemCategory === selectedCategory; 
       }
       
-      // 4. Categoría Específica: Coincidencia de texto
-      return itemCategory === selectedCategory; 
+      // 3. Lógica EXCLUSIVA para "Inicio"
+      // Para aparecer en Inicio, el ítem debe:
+      // A) Estar en la raíz (folder_id === null)
+      // B) Y NO pertenecer a ninguna de las categorías del sistema.
+      const belongsToSystemTab = itemCategory && SYSTEM_CATEGORIES.includes(itemCategory);
+      
+      return itemFolderId === null && !belongsToSystemTab;
+
   }, [selectedCategory, isGlobalContext]);
 
   // Filtrar Carpetas
   const currentFolders = useMemo(() => {
     return initialFolders.filter(folder => {
-      const matchesScope = checkScope(folder.category, folder.is_global);
-      if (!matchesScope) return false;
+      const matchesScope = checkScope(folder.category, folder.is_global, folder.parent_id);
       
+      if (!matchesScope) return false;
       if (searchTerm) return folder.name.toLowerCase().includes(searchTerm.toLowerCase());
+      
       return folder.parent_id === currentFolderId;
     })
   }, [initialFolders, currentFolderId, searchTerm, checkScope])
@@ -186,31 +209,30 @@ export function ResourceBrowser({
   // Filtrar Recursos (Archivos)
   const filteredResources = useMemo(() => {
     return resources.filter((resource) => {
-      // Pasamos 'is_public' como indicador global
-      const matchesScope = checkScope(resource.category, resource.is_public);
-      
+      // ✅ Filtro Optimista (Lista Negra)
+      if (hiddenResourceIds.has(resource.id)) return false;
+
+      const matchesScope = checkScope(resource.category, resource.is_public, resource.folder_id);
       const term = searchTerm.toLowerCase();
       const matchesSearch = !term || resource.title.toLowerCase().includes(term) || (resource.tags && resource.tags.some(t => t.toLowerCase().includes(term)));
       
       let matchesFolder = false;
       if (searchTerm) {
-          matchesFolder = true; // Búsqueda global salta carpetas
+          matchesFolder = true; // Búsqueda global salta niveles
       } else {
-          // Si estamos en favoritos o compartidos y en la raíz, mostramos todo plano
           const isFlatView = (browserContext === 'favorites' || browserContext === 'shared') && currentFolderId === null;
           if (isFlatView) {
               matchesFolder = true; 
           } else {
-              // Vista jerárquica normal
-              matchesFolder = (resource.folder_id === currentFolderId) || (!resource.folder_id && currentFolderId === null);
+              matchesFolder = (resource.folder_id === currentFolderId);
           }
       }
       return matchesScope && matchesSearch && matchesFolder;
     })
-  }, [resources, searchTerm, currentFolderId, checkScope, browserContext])
+  }, [resources, searchTerm, currentFolderId, checkScope, browserContext, hiddenResourceIds])
 
   // ----------------------------------------------------------------------
-  // 4. HANDLERS Y EFECTOS
+  // 4. HANDLERS
   // ----------------------------------------------------------------------
   
   const handleCategoryChange = (category: string) => {
@@ -250,32 +272,20 @@ export function ResourceBrowser({
     if (!newFolderName.trim()) return
     setIsLoadingAction(true)
     
-    // Determinar metadatos de la carpeta según contexto
     let targetIsGlobal = false;
     let targetCategory: string | null = null;
 
     if (browserContext === 'home') {
-       if (selectedCategory === "Globales") {
-           targetIsGlobal = true;
+       if (selectedCategory === "Inicio") {
+           targetIsGlobal = false; 
            targetCategory = null; 
        } else if (SYSTEM_CATEGORIES.includes(selectedCategory)) {
-           targetIsGlobal = false;
+           targetIsGlobal = false; 
            targetCategory = selectedCategory;
-       } else if (selectedCategory === "Todos") {
-           if (isAdmin) {
-               targetIsGlobal = true;
-               targetCategory = null;
-           } else {
-               toast.error("Selecciona una categoría específica para crear carpetas.");
-               setIsLoadingAction(false);
-               return;
-           }
        }
-    } else if (browserContext === 'favorites') {
-       targetCategory = 'favorites_view';
-    } else if (browserContext === 'shared') {
-       targetCategory = 'shared_view';
     }
+    // ✅ CLEAN CODE: Se eliminaron los bloques de 'favorites' y 'shared'
+    // porque ya no permitimos crear carpetas allí.
 
     const res = await createFolder(newFolderName, currentFolderId, targetIsGlobal, targetCategory) 
     
@@ -295,24 +305,49 @@ export function ResourceBrowser({
   const initiateDelete = (e: React.MouseEvent, folder: FolderType) => { e.stopPropagation(); setFolderToDelete(folder); setActiveMenuFolderId(null); }
   const handleDeleteFolder = async () => { if (!folderToDelete) return; setIsLoadingAction(true); await deleteFolder(folderToDelete.id); setIsLoadingAction(false); setFolderToDelete(null); }
 
+  // Handlers Recursos
+  const handleEditResource = (resource: ResourceWithRelations) => { router.push(`/resources/${resource.id}/edit`) }
+  const handleDeleteResource = async (resourceId: string) => {
+    setIsLoadingAction(true)
+    try {
+      await deleteResource(resourceId) 
+      toast.success("Recurso eliminado correctamente")
+      router.refresh()
+    } catch (error) {
+      toast.error("Error al eliminar el recurso")
+      console.error(error)
+    } finally {
+      setIsLoadingAction(false)
+    }
+  }
+
   useEffect(() => {
     const handleClickOutside = () => setActiveMenuFolderId(null)
     window.addEventListener('click', handleClickOutside)
     return () => window.removeEventListener('click', handleClickOutside)
   }, [])
 
-  // Permisos de creación
+  // ----------------------------------------------------------------------
+  // LOGICA UI: Permisos y Títulos
+  // ----------------------------------------------------------------------
+
+  // ✅ SOLUCIÓN ROBUSTA: 'Nueva Carpeta' solo disponible en Home y Mine.
+  // Se eliminaron 'favorites' y 'shared' de esta condición.
   const canCreateFolderHere = isAdmin || 
-    (browserContext === 'mine') || (browserContext === 'favorites') || (browserContext === 'shared') ||
-    (browserContext === 'home' && (SYSTEM_CATEGORIES.includes(selectedCategory) || selectedCategory === 'Globales'));
+    (browserContext === 'mine') || 
+    (browserContext === 'home');
   
-  // Título dinámico
+  // ✅ SOLUCIÓN ROBUSTA: Empty State Inteligente
+  // Permitimos mostrar acciones en todos los contextos válidos.
+  // El botón de 'Crear Carpeta' se ocultará automáticamente gracias a 'canCreateFolderHere'.
+  const showEmptyStateActions = ['home', 'mine', 'favorites', 'shared'].includes(browserContext);
+
   const headerTitle = useMemo(() => {
       if (browserContext === 'favorites') return "Favoritos";
       if (browserContext === 'shared') return "Compartidos";
       if (browserContext === 'mine') return "Mis Recursos";
       if (currentFolderId) return folderPath[folderPath.length - 1].name;
-      return selectedCategory === "Todos" ? "Panel General" : selectedCategory;
+      return selectedCategory === "Inicio" ? "Panel General" : selectedCategory;
   }, [browserContext, currentFolderId, folderPath, selectedCategory]);
   
   const HeaderIcon = browserContext === 'favorites' ? Star : (browserContext === 'shared' ? Share2 : (browserContext === 'mine' ? Folder : Home));
@@ -324,7 +359,7 @@ export function ResourceBrowser({
   return (
     <div className="space-y-6 p-6 sm:p-8 animate-in fade-in duration-500 relative">
       
-      {/* MODAL CREAR */}
+      {/* MODALES */}
       {isCreatingFolder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
@@ -345,11 +380,10 @@ export function ResourceBrowser({
         </div>
       )}
       
-      {/* MODALES EDIT/DELETE SIMPLIFICADOS */}
       {folderToEdit && (<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"><div className="bg-white rounded-xl shadow-2xl w-full max-w-sm"><div className="p-6"><input value={newName} onChange={e=>setNewName(e.target.value)} className="w-full border p-2 rounded" /> <div className="flex justify-end mt-4 gap-2"><Button onClick={()=>setFolderToEdit(null)}>Cancelar</Button><Button onClick={handleUpdateFolder}>Guardar</Button></div></div></div></div>)}
       {folderToDelete && (<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"><div className="bg-white rounded-xl shadow-2xl w-full max-w-sm"><div className="p-6 text-center"><p>¿Eliminar {folderToDelete.name}?</p><div className="flex justify-center mt-4 gap-2"><Button onClick={()=>setFolderToDelete(null)}>Cancelar</Button><Button variant="destructive" onClick={handleDeleteFolder}>Eliminar</Button></div></div></div></div>)}
 
-      {/* HEADER PRINCIPAL */}
+      {/* HEADER */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
         <div>
           <div className="flex items-center gap-2 text-sm text-slate-500 mb-2">
@@ -371,24 +405,28 @@ export function ResourceBrowser({
         
         <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
           <SearchInput value={searchTerm} onChange={setSearchTerm} placeholder={searchPlaceholder} />
+          
+          {/* ✅ BOTÓN NUEVA CARPETA: Solo visible si canCreateFolderHere es true (Home/Mine) */}
           {canCreateFolderHere && (
               <Button variant="outline" onClick={() => setIsCreatingFolder(true)} className="border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-blue-600">
                  <FolderPlus className="w-4 h-4 mr-2" /> Nueva Carpeta
               </Button>
           )}
+          
           <Button asChild className="bg-blue-600 text-white hover:bg-blue-700 shadow-sm transition-colors">
             <Link href="/resources/new">{isAuditor ? <><Link2 className="w-4 h-4 mr-2" /> Nuevo Enlace</> : <><Plus className="w-4 h-4 mr-2" /> Nuevo Recurso</>}</Link>
           </Button>
         </div>
       </div>
 
+      {/* TABS / FILTROS */}
       <div className="border-b border-slate-100 pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         {isGlobalContext ? (
-             <CategoryFilter selectedCategory={selectedCategory} onSelectCategory={handleCategoryChange} categories={tabsToRender} />
+              <CategoryFilter selectedCategory={selectedCategory} onSelectCategory={handleCategoryChange} categories={tabsToRender} />
         ) : (
-             <div className="text-sm font-medium text-slate-500 italic">
-                {browserContext === 'mine' ? "Tus archivos personales" : (browserContext === 'favorites' ? "Tus elementos guardados" : "Archivos compartidos contigo")}
-             </div>
+              <div className="text-sm font-medium text-slate-500 italic">
+                 {browserContext === 'mine' ? "Tus archivos personales" : (browserContext === 'favorites' ? "Tus elementos guardados" : "Archivos compartidos contigo")}
+              </div>
         )}
         
         <div className="flex items-center gap-2">
@@ -419,7 +457,7 @@ export function ResourceBrowser({
                                 isGlobalFolder ? "hover:border-blue-400" : "hover:border-slate-300"
                             )}
                         >
-                            {/* Menú Contextual Carpeta */}
+                            {/* Menú Contextual */}
                             {(!isGlobalFolder || isAdmin) && (
                                 <div className="absolute top-2 right-2 z-10">
                                     <button onClick={(e) => { e.stopPropagation(); setActiveMenuFolderId(activeMenuFolderId === folder.id ? null : folder.id); }} className="p-1 rounded-full text-slate-400 hover:text-slate-700 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -446,23 +484,36 @@ export function ResourceBrowser({
             </div>
         )}
 
-        {/* ARCHIVOS (GRID/LIST) */}
+        {/* ARCHIVOS */}
         <div className={cn("mt-4", view === 'grid' ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6" : "flex flex-col gap-3")}>
              {filteredResources.map((resource) => (
-                <ResourceCard key={resource.id} resource={resource} variant={view} />
+                <ResourceCard 
+                    key={resource.id} 
+                    resource={resource} 
+                    variant={view}
+                    onEdit={handleEditResource}
+                    onDelete={handleDeleteResource}
+                    onFavoriteToggle={handleOptimisticUnfavorite} 
+                />
              ))}
         </div>
        
-        {/* ESTADO VACÍO (EMPTY STATE) */}
+        {/* ✅ ESTADO VACÍO INTELIGENTE (Smart Empty State) */}
         {filteredResources.length === 0 && currentFolders.length === 0 && (
             <div className="flex flex-col items-center justify-center py-12 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                {/* ✅ ICONO AHORA IMPORTADO CORRECTAMENTE */}
                 <FolderOpen className="w-12 h-12 text-slate-300 mb-3" />
                 <p className="text-slate-500 font-medium">Esta sección está vacía</p>
-                <div className="flex gap-4 mt-4">
-                    {canCreateFolderHere && <Button variant="outline" onClick={() => setIsCreatingFolder(true)}>Crear Carpeta</Button>}
-                    <Button variant="default" asChild><Link href="/resources/new">Subir Archivo</Link></Button>
-                </div>
+                
+                {/* LÓGICA: Se muestra el bloque de botones si 'showEmptyStateActions' es true.
+                    Dentro, 'canCreateFolderHere' decide si aparece 'Crear Carpeta'.
+                    'Subir Archivo' aparece siempre que el bloque sea visible.
+                */}
+                {showEmptyStateActions && (
+                    <div className="flex gap-4 mt-4">
+                        {canCreateFolderHere && <Button variant="outline" onClick={() => setIsCreatingFolder(true)}>Crear Carpeta</Button>}
+                        <Button variant="default" asChild><Link href="/resources/new">Subir Archivo</Link></Button>
+                    </div>
+                )}
             </div>
         )}
       </div>

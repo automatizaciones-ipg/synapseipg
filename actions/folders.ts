@@ -36,22 +36,13 @@ export async function createFolder(
 
   if (!user) return { success: false, message: "Debes iniciar sesión." }
 
-  // --- LÓGICA DE VISIBILIDAD CORREGIDA ---
-  
   let finalCategory = categoryInput;
   let finalIsGlobal = false;
 
-  // CASO 1: Pestaña "Globales" (Raíz del sistema)
   if (categoryInput === "Globales" || categoryInput === "Todos" || categoryInput?.trim() === "") {
     finalCategory = null;
-    finalIsGlobal = true; // Solo aquí activamos el flag global real
-  } 
-  // CASO 2: Pestaña Específica (Ej: "Comunicaciones", "Admisión")
-  else {
-    // Mantenemos la categoría tal cual llega (para que aparezca en su pestaña)
-    // Pero forzamos is_global a FALSE.
-    // Esto evita que se marque como "carpeta del sistema" y permite que la lógica
-    // de permisos funcione por categoría.
+    finalIsGlobal = true; 
+  } else {
     finalIsGlobal = false; 
   }
 
@@ -61,23 +52,24 @@ export async function createFolder(
       name,
       parent_id: parentId,
       user_id: user.id,
-      is_global: finalIsGlobal, // Usamos el valor calculado
+      is_global: finalIsGlobal,
       category: finalCategory 
     })
     .select('*')
     .single()
 
   if (error) {
-    console.error("Error creating folder:", error.message)
+    console.error("❌ Error creando carpeta:", error.message)
     return { success: false, message: error.message }
   }
   
   revalidatePath('/', 'layout')
-  return { success: true, data: data as FolderRow }
+  // MENSAJE AGREGADO AQUÍ
+  return { success: true, data: data as FolderRow, message: "Carpeta creada correctamente." }
 }
 
 // ---------------------------------------------------------
-// 2. OBTENER CARPETAS (CON FILTRO DE USUARIO EN FAVORITOS)
+// 2. OBTENER CARPETAS (INTACTO)
 // ---------------------------------------------------------
 export async function getFolders(
   parentId: string | null, 
@@ -87,45 +79,28 @@ export async function getFolders(
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
+  if (!user) return { success: false, data: [] }
+
   let query = supabase
     .from('folders')
     .select('*')
     .order('name')
 
-  // A. FILTRO PADRE
   if (parentId) {
     query = query.eq('parent_id', parentId)
   } else {
     query = query.is('parent_id', null)
   }
 
-  // B. FILTRO DE CONTEXTO
-
-  // CAMINO 1: Categoría específica (Aquí entra "Favoritos", "Compartidos", "Comunicaciones")
   if (categoryInput && categoryInput !== "Globales" && categoryInput !== "Todos") {
       query = query.eq('category', categoryInput)
-      
-      // Si estamos en "Mis Archivos" (no global tab) viendo una categoría, filtramos por usuario
-      if (!isGlobalTab) {
-          if (!user) return { success: false, data: [] }
-          query = query.eq('user_id', user.id)
-      }
+      if (!isGlobalTab) query = query.eq('user_id', user.id) 
   } 
-  
-  // CAMINO 2: Raíz Global ("Globales")
   else if (isGlobalTab || categoryInput === "Globales") {
       query = query.eq('is_global', true)
-      
-      if (!parentId) {
-          query = query.is('category', null)
-      }
+      if (!parentId) query = query.is('category', null)
   } 
-  
-  // CAMINO 3: Personal ("Mis Recursos" / Raíz)
   else {
-      if (!user) return { success: false, data: [] }
-      // Corrección adicional: Aseguramos que solo traiga carpetas SIN categoría
-      // para que las de "Comunicaciones" no aparezcan mezcladas aquí.
       query = query
         .eq('user_id', user.id)
         .eq('is_global', false)
@@ -135,7 +110,7 @@ export async function getFolders(
   const { data, error } = await query
 
   if (error) {
-    console.error("Error fetching folders:", error.message)
+    console.error("❌ Error fetching folders:", error.message)
     return { success: false, data: [] }
   }
 
@@ -143,20 +118,63 @@ export async function getFolders(
 }
 
 // ---------------------------------------------------------
-// 3. EDITAR Y BORRAR
+// 3. EDITAR CARPETA
 // ---------------------------------------------------------
 export async function updateFolder(folderId: string, newName: string): Promise<ActionResponse> {
   const supabase = await createClient()
-  const { error } = await supabase.from('folders').update({ name: newName }).eq('id', folderId)
-  if (error) return { success: false, message: error.message }
+  
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, message: "No autorizado" }
+  if (!newName || newName.trim() === "") return { success: false, message: "Nombre inválido" }
+
+  const { data, error } = await supabase
+    .from('folders')
+    .update({ name: newName })
+    .eq('id', folderId)
+    .select() 
+
+  if (error) {
+    console.error("❌ Error update:", error.message)
+    return { success: false, message: error.message }
+  }
+
+  if (!data || data.length === 0) {
+    return { success: false, message: "No se encontró la carpeta o no hubo cambios." }
+  }
+
   revalidatePath('/', 'layout')
-  return { success: true }
+  // MENSAJE AGREGADO AQUÍ
+  return { success: true, message: "Carpeta renombrada correctamente." }
 }
 
+// ---------------------------------------------------------
+// 4. ELIMINAR CARPETA
+// ---------------------------------------------------------
 export async function deleteFolder(folderId: string): Promise<ActionResponse> {
   const supabase = await createClient()
-  const { error } = await supabase.from('folders').delete().eq('id', folderId)
-  if (error) return { success: false, message: error.message }
+  
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, message: "No autorizado" }
+
+  console.log(`🗑️ Eliminando carpeta ${folderId}`)
+
+  const { data, error } = await supabase
+    .from('folders')
+    .delete() 
+    .eq('id', folderId)
+    .select()
+
+  if (error) {
+    console.error("❌ Error delete:", error.message)
+    return { success: false, message: error.message }
+  }
+
+  if (!data || data.length === 0) {
+    return { success: false, message: "No se encontró la carpeta." }
+  }
+
+  console.log("✅ Carpeta eliminada")
   revalidatePath('/', 'layout')
-  return { success: true }
+  // MENSAJE AGREGADO AQUÍ
+  return { success: true, message: "Carpeta eliminada correctamente." }
 }

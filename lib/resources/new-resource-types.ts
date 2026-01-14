@@ -1,65 +1,128 @@
-import { Dispatch, SetStateAction } from 'react'
+// components/resources/new-resource-types.ts
 
-export const CATEGORIES = [
-  'Globales', 
-  'Comunicaciones', 
-  'Admisión', 
-  'Secretaría General', 
-  'Gestión de Personas', 
-  'Asuntos Académicos', 
-  'Asuntos Económicos', 
-  'Desarrollo'
-] as const
+// =====================================================================
+// 1. TIPOS UI EXISTENTES (Necesarios para tu Formulario y Componentes)
+// =====================================================================
 
-export type CategoryType = typeof CATEGORIES[number] | string
-
-export interface ShareEntity {
+export interface UserProfile {
   id: string
-  label?: string
-  name?: string
-  image?: string
-  // Usamos 'unknown' para satisfacer la regla 'no-explicit-any'
-  [key: string]: unknown 
+  email: string
+  full_name?: string
+  avatar_url?: string
+}
+
+export interface GroupProfile {
+  id: string
+  name: string
+  description?: string
+  member_count?: number
 }
 
 export interface ResourceFormData {
-  title: string           
-  description: string     
-  category: string        
-  tags: string            
-  folder_id: string | null
-  
-  is_public?: boolean
-  color?: string
-  
-  file_url?: string | null
-  file_path?: string | null
-  file_type?: string | null
-  file_size?: number
-  image_url?: string | null
-  ai_summary?: string | null
-  dominant_color?: string
-  link?: string           
+  title: string
+  description: string
+  category: string
+  tags: string
+  color: string 
+  iconType: string // Aseguramos que iconType esté aquí si lo usas en el form
+  is_public: boolean
 }
 
+// Props para el formulario ResourceForm
 export interface ResourceFormProps {
   formData: ResourceFormData
-  setFormData: Dispatch<SetStateAction<ResourceFormData>>
-  
-  selectedUsers: ShareEntity[]
-  setSelectedUsers: (users: ShareEntity[]) => void 
-  selectedGroups: ShareEntity[]
-  setSelectedGroups: (groups: ShareEntity[]) => void 
-  
+  setFormData: (data: ResourceFormData) => void
+  selectedUsers: string[]
+  setSelectedUsers: (users: string[]) => void
+  selectedGroups: string[]
+  setSelectedGroups: (groups: string[]) => void
   onSave: () => void
   onAI: () => void
   loading: boolean
   aiLoading: boolean
   isFile?: boolean
-  isAdmin: boolean
-  
   selectedFolderId: string | null
   setSelectedFolderId: (id: string | null) => void
-  selectedFolderName: string
-  setSelectedFolderName: (name: string) => void
+  selectedFolderName: string | null
+  setSelectedFolderName: (name: string | null) => void
+  isAdmin: boolean
+}
+
+// Constantes globales
+export const CATEGORIES = [
+  "Comunicaciones", 
+  "Admisión", 
+  "Inducción", 
+  "Secretaría General",
+  "RRHH",
+  "Finanzas", 
+  "Asuntos Académicos", 
+  "Asuntos Económicos & Administrativos",
+  "Desarrollo",
+  "Otros"
+]
+
+export const ACCEPTED_TYPES = {
+  'application/pdf': ['.pdf'],
+  'application/msword': ['.doc'],
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+  'application/vnd.ms-excel': ['.xls'],
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+  'application/vnd.ms-powerpoint': ['.ppt'],
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'],
+  'image/*': ['.png', '.jpg', '.jpeg', '.webp'],
+  'text/plain': ['.txt']
+}
+
+export const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
+
+// =====================================================================
+// 2. NUEVOS TIPOS PARA LA ARQUITECTURA (CQRS & VISTAS SQL)
+// =====================================================================
+
+// Payload para guardar (Usado en actions/resources.ts -> saveResource)
+export interface ResourceData {
+  title: string
+  description: string
+  category: string
+  tags: string[]
+  file_url?: string | null
+  file_path?: string | null
+  file_type?: string | null
+  file_size?: number
+  link?: string | null 
+  color: string 
+  shared_with?: string[]   
+  shared_groups?: string[] 
+  folder_id?: string | null 
+  folderId?: string | null // Retrocompatibilidad
+  is_public?: boolean 
+}
+
+// ✅ ESTA ES LA INTERFAZ CRÍTICA QUE FALTABA
+// Representa el objeto que devuelve tu VISTA SQL (v_library_access)
+export interface LibraryResource {
+  id: string
+  title: string
+  description: string | null
+  category: string
+  tags: string[] | null
+  file_url: string | null
+  file_path: string | null
+  file_type: string | null
+  file_size: number | null
+  created_at: string
+  updated_at: string
+  created_by: string
+  is_public: boolean
+  folder_id: string | null
+  dominant_color: string | null
+  
+  // Campos enriquecidos por SQL View
+  author_name: string | null
+  author_avatar: string | null
+  author_email: string | null
+  
+  // Razón de acceso
+  access_reason: 'OWNER' | 'PUBLIC' | 'SHARED_USER' | 'SHARED_GROUP'
 }

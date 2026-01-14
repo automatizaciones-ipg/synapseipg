@@ -1,6 +1,11 @@
 'use client'
 
-import { useState } from "react"
+import { useState, useRef } from "react"
+import { useRouter } from "next/navigation"
+import { createClient } from "@/lib/supabase/client"
+import { useTheme } from "next-themes" 
+
+// UI Components
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -14,13 +19,14 @@ import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
 import { 
   User, Shield, Sparkles, HardDrive, 
-  LogOut, Loader2, Laptop 
+  LogOut, Loader2, Laptop, Camera 
 } from "lucide-react"
+
 import { toast } from "sonner"
 import { updateProfileSettings } from "@/actions/settings"
 
-// Función auxiliar para formatear bytes
-function formatBytes(bytes: number, decimals = 2) {
+// --- UTILS ---
+function formatBytes(bytes: number, decimals = 2): string {
   if (!+bytes) return '0 Bytes'
   const k = 1024
   const dm = decimals < 0 ? 0 : decimals
@@ -29,6 +35,7 @@ function formatBytes(bytes: number, decimals = 2) {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`
 }
 
+// --- INTERFACES ---
 interface SettingsViewProps {
   user: {
     email: string
@@ -37,40 +44,128 @@ interface SettingsViewProps {
   profile: {
     full_name: string | null
     avatar_url: string | null
-    bio?: string | null // Añadimos bio al tipo
+    bio?: string | null
   }
-  storageUsed: number // Dato real en bytes
+  storageUsed: number
 }
 
 export function SettingsView({ user, profile, storageUsed }: SettingsViewProps) {
+  const router = useRouter()
+  const supabase = createClient()
+  
+  // Hook de Next-Themes para controlar el modo oscuro/claro
+  const { theme, setTheme, resolvedTheme } = useTheme()
+  
+  // Estados de Carga
   const [loading, setLoading] = useState(false)
+  const [uploadingImage, setUploadingImage] = useState(false)
   
-  // Estado del Formulario
+  // Estados del Formulario
   const [fullName, setFullName] = useState(profile.full_name || "")
-  // Iniciamos la bio con el dato real de la BD o un string vacío
   const [bio, setBio] = useState(profile.bio || "")
-  
-  // Preferencias
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(profile.avatar_url)
+
+  // Preferencias (Locales por ahora)
   const [aiAutoTag, setAiAutoTag] = useState(true)
   const [emailNotifs, setEmailNotifs] = useState(true)
-  const [themeSystem, setThemeSystem] = useState(true) // Estado para el switch de tema
 
-  // Lógica de Almacenamiento
-  const STORAGE_LIMIT = 500 * 1024 * 1024; // Ejemplo: Límite de 500MB (Ajustable)
+  // Referencia tipada para el input de archivo
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Cálculos de UI
+  const STORAGE_LIMIT = 500 * 1024 * 1024; // 500 MB
   const storagePercentage = Math.min((storageUsed / STORAGE_LIMIT) * 100, 100)
 
+  // Determinar si el switch debe estar activo (Modo Oscuro)
+  const isDarkMode = theme === 'dark' || resolvedTheme === 'dark'
+
+  // --- HANDLER: CAMBIO DE TEMA ---
+  const handleThemeToggle = (checked: boolean) => {
+    setTheme(checked ? "dark" : "light")
+  }
+
+  // --- HANDLER: CLICK EN AVATAR ---
+  const handleAvatarClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  // --- HANDLER: SUBIDA DE ARCHIVO (Lógica Robusta) ---
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // 1. Validaciones
+    if (!file.type.startsWith('image/')) {
+        toast.error("El archivo debe ser una imagen")
+        return
+    }
+    // Límite 2MB
+    if (file.size > 2 * 1024 * 1024) { 
+        toast.error("La imagen debe pesar menos de 2MB")
+        return
+    }
+
+    setUploadingImage(true)
+    const toastId = toast.loading("Subiendo nueva foto...")
+
+    try {
+        // 2. Definir ruta única: avatars/userId-timestamp.ext
+        const fileExt = file.name.split('.').pop()
+        const filePath = `${user.id}-${Date.now()}.${fileExt}`
+
+        // 3. Subir a Supabase (Bucket 'avatars')
+        const { error: uploadError } = await supabase.storage
+            .from('avatars')
+            .upload(filePath, file)
+
+        if (uploadError) throw uploadError
+
+        // 4. Obtener URL Pública
+        const { data: urlData } = supabase.storage
+            .from('avatars')
+            .getPublicUrl(filePath)
+            
+        const publicUrl = urlData.publicUrl
+
+        // 5. Actualizar Perfil en BD (Server Action)
+        const result = await updateProfileSettings({
+            fullName,
+            bio,
+            avatarUrl: publicUrl
+        })
+
+        if (!result.success) throw new Error(result.message)
+
+        // 6. Actualizar UI
+        setAvatarUrl(publicUrl)
+        toast.success("Foto actualizada", { id: toastId })
+        router.refresh() // Refrescar datos del servidor
+
+    } catch (error) {
+        console.error("Error upload:", error)
+        toast.error("Error al subir la imagen", { id: toastId })
+    } finally {
+        setUploadingImage(false)
+        // Reset del input para permitir subir la misma foto si falla y se reintenta
+        if (fileInputRef.current) {
+            fileInputRef.current.value = ""
+        }
+    }
+  }
+
+  // --- HANDLER: GUARDAR DATOS DE TEXTO ---
   const handleSaveProfile = async () => {
     setLoading(true)
     try {
-      // Enviamos también la preferencia de tema si tuvieras la columna
       const result = await updateProfileSettings({ 
         fullName, 
         bio,
-        themePreference: themeSystem ? 'system' : 'light' 
+        // No enviamos avatarUrl aquí porque ya se guardó al subir o es el mismo
       })
       
       if (result.success) {
         toast.success("Perfil actualizado correctamente")
+        router.refresh()
       } else {
         toast.error("Error al guardar en base de datos")
       }
@@ -85,20 +180,43 @@ export function SettingsView({ user, profile, storageUsed }: SettingsViewProps) 
   return (
     <div className="space-y-6">
       
-      {/* HEADER DE PERFIL */}
+      {/* HEADER DE PERFIL (DISEÑO INTOCABLE) */}
       <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-blue-600 to-indigo-700 p-6 text-white shadow-lg">
         <div className="relative z-10 flex items-center gap-6">
-          <Avatar className="h-20 w-20 border-4 border-white/20 shadow-xl">
-            <AvatarImage src={profile.avatar_url || ""} />
-            <AvatarFallback className="bg-white/10 text-white text-xl">
-              {(fullName || user.email).substring(0, 2).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
+          
+          {/* AVATAR INTERACTIVO */}
+          <div className="relative group cursor-pointer" onClick={handleAvatarClick}>
+             <Avatar className="h-20 w-20 border-4 border-white/20 shadow-xl transition-transform group-hover:scale-105">
+                <AvatarImage src={avatarUrl || ""} className="object-cover" />
+                <AvatarFallback className="bg-white/10 text-white text-xl backdrop-blur-md">
+                    {(fullName || user.email).substring(0, 2).toUpperCase()}
+                </AvatarFallback>
+             </Avatar>
+             
+             {/* Overlay visual al pasar el mouse */}
+             <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-[1px]">
+                 {uploadingImage ? (
+                    <Loader2 className="w-6 h-6 text-white animate-spin" />
+                 ) : (
+                    <Camera className="w-6 h-6 text-white" />
+                 )}
+             </div>
+
+             {/* Input Oculto */}
+             <input 
+                type="file" 
+                ref={fileInputRef}
+                className="hidden"
+                accept="image/png, image/jpeg, image/webp"
+                onChange={handleFileChange}
+                disabled={uploadingImage}
+             />
+          </div>
+
           <div>
             <h2 className="text-2xl font-bold">{fullName || "Usuario Sin Nombre"}</h2>
             <p className="text-blue-100">{user.email}</p>
             <div className="mt-2 flex items-center gap-2">
-              {/* CAMBIO: Badge dice "Activo" en lugar de Plan Pro */}
               <span className="inline-flex items-center rounded-full bg-green-500/20 px-3 py-0.5 text-xs font-medium text-green-100 border border-green-400/30 backdrop-blur-md">
                 Estado: Activo
               </span>
@@ -109,7 +227,6 @@ export function SettingsView({ user, profile, storageUsed }: SettingsViewProps) 
       </div>
 
       <Tabs defaultValue="general" className="w-full">
-        {/* CAMBIO: Eliminamos la pestaña de "Plan" */}
         <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="ai">IA & Auto</TabsTrigger>
@@ -166,8 +283,11 @@ export function SettingsView({ user, profile, storageUsed }: SettingsViewProps) 
                       <Label className="text-base">Tema del Sistema</Label>
                       <p className="text-sm text-slate-500">Sincronizar con el modo claro/oscuro de tu dispositivo.</p>
                     </div>
-                    {/* CAMBIO: Switch habilitado para guardar preferencia */}
-                    <Switch checked={themeSystem} onCheckedChange={setThemeSystem} />
+                    {/* SWITCH DE TEMA CONECTADO */}
+                    <Switch 
+                        checked={isDarkMode} 
+                        onCheckedChange={handleThemeToggle} 
+                    />
                   </div>
                   <Separator />
                   <div className="flex items-center justify-between">
@@ -191,7 +311,6 @@ export function SettingsView({ user, profile, storageUsed }: SettingsViewProps) 
                     <span>Total Disponible: 500 MB</span> 
                   </div>
                   
-                  {/* Barra de progreso real */}
                   <Progress 
                     value={storagePercentage} 
                     className="h-2 bg-blue-200 [&>div]:bg-blue-600" 
@@ -257,8 +376,8 @@ export function SettingsView({ user, profile, storageUsed }: SettingsViewProps) 
                    </div>
                    <form action="/auth/signout" method="post">
                       <Button variant="outline" className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700">
-                         <LogOut className="w-4 h-4 mr-2" />
-                         Salir
+                          <LogOut className="w-4 h-4 mr-2" />
+                          Salir
                       </Button>
                    </form>
                 </div>

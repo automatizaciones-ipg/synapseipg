@@ -1,3 +1,4 @@
+// ARCHIVO: app/login/page.tsx
 'use client'
 
 import { useState } from 'react'
@@ -9,16 +10,24 @@ import { toast } from 'sonner'
 import { Loader2, Eye, EyeOff, Zap, ArrowRight, CheckCircle2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { motion, AnimatePresence } from 'framer-motion'
-import { cn } from '@/lib/utils'
 
 export default function LoginPage() {
   const [viewState, setViewState] = useState<'login' | 'register'>('login')
   const [loading, setLoading] = useState(false)
+  
+  // Estado para el modal de recuperación
+  const [isResetOpen, setIsResetOpen] = useState(false)
+  const [resetLoading, setResetLoading] = useState(false)
+
   const [showPassword, setShowPassword] = useState(false)
 
-  // Manejo del formulario principal
+  // Manejo del formulario principal (Login/Register)
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    
+    // 🛡️ SEGURIDAD EXTRA: Si el modal de reset está abierto, NO permitir login
+    if (isResetOpen) return 
+
     setLoading(true)
     const formData = new FormData(event.currentTarget)
     
@@ -32,26 +41,34 @@ export default function LoginPage() {
   // Manejo de Recuperación de contraseña
   async function handleReset(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setLoading(true)
+    // Evitamos propagación del evento al formulario padre
+    event.stopPropagation() 
+    
+    setResetLoading(true)
+    
     const formData = new FormData(event.currentTarget)
     const result = await resetPassword(formData)
-    setLoading(false)
-    if (result?.error) toast.error(result.error)
-    else if (result?.success) toast.success(result.success)
+    
+    setResetLoading(false)
+    
+    if (result?.error) {
+        toast.error(result.error)
+    } else if (result?.success) {
+        toast.success(result.success)
+        setIsResetOpen(false) // CERRAMOS EL MODAL AUTOMÁTICAMENTE
+    }
   }
 
   return (
     <div className="w-full min-h-screen grid lg:grid-cols-2">
       
-      {/* 🎨 SECCIÓN IZQUIERDA: VISUAL & BRANDING (Dark Mode) */}
+      {/* 🎨 SECCIÓN IZQUIERDA: VISUAL & BRANDING */}
       <div className="hidden lg:flex flex-col justify-between bg-slate-950 relative overflow-hidden p-12 text-white">
-        {/* Fondo animado sutil (La Sinapsis de fondo) */}
         <div className="absolute inset-0 z-0">
-             <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] bg-blue-600/20 rounded-full blur-[100px] animate-pulse" />
-             <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] bg-indigo-600/20 rounded-full blur-[100px] animate-pulse delay-1000" />
+              <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] bg-blue-600/20 rounded-full blur-[100px] animate-pulse" />
+              <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] bg-indigo-600/20 rounded-full blur-[100px] animate-pulse delay-1000" />
         </div>
 
-        {/* Logo superior */}
         <div className="relative z-10 flex items-center gap-3">
             <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
                 <Zap className="w-6 h-6 text-white fill-current" />
@@ -59,7 +76,6 @@ export default function LoginPage() {
             <span className="text-xl font-bold tracking-tight">Synapse IPG</span>
         </div>
 
-        {/* Contenido Central Inspiracional */}
         <div className="relative z-10 max-w-lg">
             <motion.h1 
                 initial={{ opacity: 0, y: 20 }}
@@ -79,7 +95,6 @@ export default function LoginPage() {
             </motion.p>
         </div>
 
-        {/* Footer pequeño */}
         <div className="relative z-10 flex items-center gap-4 text-xs text-slate-500 font-medium">
             <div className="flex -space-x-2">
                  {[1,2,3].map(i => (
@@ -92,14 +107,12 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* 🔐 SECCIÓN DERECHA: FORMULARIO (Clean UI) */}
+      {/* 🔐 SECCIÓN DERECHA: FORMULARIO */}
       <div className="flex items-center justify-center bg-slate-50 p-6 lg:p-12 relative">
-         {/* Decoración móvil (solo visible en celular para dar color) */}
          <div className="lg:hidden absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-600 to-indigo-600" />
 
          <div className="w-full max-w-md space-y-8">
             
-            {/* Cabecera del Formulario con Transición */}
             <div className="text-center space-y-2">
                 <motion.div 
                     key={viewState}
@@ -121,7 +134,6 @@ export default function LoginPage() {
                 </motion.div>
             </div>
 
-            {/* Contenedor del Formulario con AnimatePresence para suavidad */}
             <div className="bg-white p-8 rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100">
                 <form onSubmit={handleSubmit} className="space-y-5">
                 <AnimatePresence mode="popLayout">
@@ -138,7 +150,8 @@ export default function LoginPage() {
                                 name="full_name" 
                                 placeholder="Ej: Marcela Paz" 
                                 required 
-                                className="h-11 bg-slate-50 border-slate-200 focus:bg-white transition-all"
+                                disabled={loading || isResetOpen} // 🔒 BLOQUEADO SI EL MODAL ESTÁ ABIERTO
+                                className="h-11 bg-slate-50 border-slate-200 focus:bg-white transition-all disabled:opacity-50"
                             />
                         </motion.div>
                     )}
@@ -152,7 +165,8 @@ export default function LoginPage() {
                         type="email" 
                         placeholder="usuario@ipg.cl" 
                         required 
-                        className="h-11 bg-slate-50 border-slate-200 focus:bg-white transition-all"
+                        disabled={loading || isResetOpen} // 🔒 BLOQUEADO SI EL MODAL ESTÁ ABIERTO
+                        className="h-11 bg-slate-50 border-slate-200 focus:bg-white transition-all disabled:opacity-50"
                     />
                 </div>
                 
@@ -160,7 +174,8 @@ export default function LoginPage() {
                     <div className="flex items-center justify-between">
                     <Label htmlFor="password">Contraseña</Label>
                     {viewState === 'login' && (
-                        <Dialog>
+                        /* 🟢 MODAL DE RECUPERACIÓN */
+                        <Dialog open={isResetOpen} onOpenChange={setIsResetOpen}>
                         <DialogTrigger asChild>
                             <button type="button" className="text-xs font-medium text-blue-600 hover:text-blue-500 hover:underline transition-colors">
                             ¿Olvidaste tu contraseña?
@@ -173,13 +188,25 @@ export default function LoginPage() {
                                 Te enviaremos un enlace seguro a tu correo corporativo para restablecerla.
                             </DialogDescription>
                             </DialogHeader>
+                            
+                            {/* FORMULARIO DEL MODAL (Separado) */}
                             <form onSubmit={handleReset} className="space-y-4 mt-2">
                                 <div className="space-y-2">
                                     <Label>Correo electrónico</Label>
-                                    <Input name="email" type="email" placeholder="tu@ipg.cl" required />
+                                    <Input 
+                                        name="email" 
+                                        type="email" 
+                                        placeholder="tu@ipg.cl" 
+                                        required 
+                                        disabled={resetLoading}
+                                    />
                                 </div>
-                                <Button type="submit" className="w-full bg-blue-600" disabled={loading}>
-                                    {loading ? <Loader2 className="w-4 h-4 animate-spin"/> : "Enviar enlace de recuperación"}
+                                <Button 
+                                    type="submit" 
+                                    className="w-full bg-blue-600 hover:bg-blue-500" 
+                                    disabled={resetLoading}
+                                >
+                                    {resetLoading ? <Loader2 className="w-4 h-4 animate-spin"/> : "Enviar enlace de recuperación"}
                                 </Button>
                             </form>
                         </DialogContent>
@@ -194,12 +221,14 @@ export default function LoginPage() {
                         type={showPassword ? "text" : "password"} 
                         required 
                         minLength={6}
-                        className="h-11 bg-slate-50 border-slate-200 focus:bg-white transition-all pr-10"
+                        disabled={loading || isResetOpen} // 🔒 BLOQUEADO SI EL MODAL ESTÁ ABIERTO
+                        className="h-11 bg-slate-50 border-slate-200 focus:bg-white transition-all pr-10 disabled:opacity-50"
                     />
                     <button 
                         type="button"
+                        disabled={loading || isResetOpen} // 🔒 BLOQUEADO TAMBIÉN
                         onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors disabled:opacity-50"
                     >
                         {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
@@ -221,16 +250,21 @@ export default function LoginPage() {
                                 type="password" 
                                 required 
                                 minLength={6}
-                                className="h-11 bg-slate-50 border-slate-200 focus:bg-white transition-all"
+                                disabled={loading || isResetOpen} // 🔒 BLOQUEADO
+                                className="h-11 bg-slate-50 border-slate-200 focus:bg-white transition-all disabled:opacity-50"
                             />
                         </motion.div>
                     )}
                 </AnimatePresence>
 
+                {/* 🔥 CORRECCIÓN CRÍTICA: 
+                   El botón principal se desactiva si 'isResetOpen' es true.
+                   Esto impide que al hacer clic en el modal, se dispare este botón.
+                */}
                 <Button 
                     type="submit" 
-                    className="w-full h-11 bg-blue-600 hover:bg-blue-500 text-base shadow-lg shadow-blue-600/20 transition-all hover:scale-[1.01] active:scale-[0.98] cursor-pointer" 
-                    disabled={loading}
+                    className="w-full h-11 bg-blue-600 hover:bg-blue-500 text-base shadow-lg shadow-blue-600/20 transition-all hover:scale-[1.01] active:scale-[0.98] cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed" 
+                    disabled={loading || isResetOpen} 
                 >
                     {loading ? (
                         <Loader2 className="mr-2 h-5 w-5 animate-spin" />
@@ -245,14 +279,14 @@ export default function LoginPage() {
                 </form>
             </div>
 
-            {/* Toggle Login/Register */}
             <div className="text-center">
                 <p className="text-sm text-slate-500">
                     {viewState === 'login' ? "¿Aún no tienes cuenta? " : "¿Ya tienes una cuenta? "}
                     <button 
                         type="button"
+                        disabled={loading || isResetOpen} // 🔒 ENLACE BLOQUEADO TAMBIEN
                         onClick={() => setViewState(viewState === 'login' ? 'register' : 'login')}
-                        className="font-semibold text-blue-600 hover:text-blue-500 hover:underline transition-colors outline-none focus-visible:ring-2 focus-visible:ring-blue-600 rounded cursor-pointer"
+                        className="font-semibold text-blue-600 hover:text-blue-500 hover:underline transition-colors outline-none focus-visible:ring-2 focus-visible:ring-blue-600 rounded cursor-pointer disabled:opacity-50"
                     >
                         {viewState === 'login' ? "Solicitar acceso" : "Iniciar Sesión"}
                     </button>
@@ -261,7 +295,6 @@ export default function LoginPage() {
 
          </div>
 
-         {/* Footer Legal (Copyright) */}
          <div className="absolute bottom-6 text-center w-full text-xs text-slate-400">
             © 2025 IPG Synapse System. Todos los derechos reservados.
          </div>
@@ -270,21 +303,9 @@ export default function LoginPage() {
   )
 }
 
-// Icono auxiliar para el footer de la izquierda
 function UsersIcon(props: React.SVGProps<SVGSVGElement>) {
     return (
-      <svg
-        {...props}
-        xmlns="http://www.w3.org/2000/svg"
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
+      <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
         <circle cx="9" cy="7" r="4" />
         <path d="M22 21v-2a4 4 0 0 0-3-3.87" />

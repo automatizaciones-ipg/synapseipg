@@ -1,3 +1,4 @@
+// ARCHIVO: components/dashboard/group-card.tsx
 'use client'
 
 import Link from "next/link"
@@ -19,6 +20,16 @@ import {
 import { cn } from "@/lib/utils"
 // Importamos los tipos correctamente exportados
 import { GroupData, GroupMember } from "@/actions/groups" 
+
+// ✅ UTILIDAD ROBUSTA: Estandarizada para todo el proyecto
+function getInitials(name: string) {
+  return name
+    .match(/(\b\S)?/g)
+    ?.join("")
+    .match(/(^\S|\S$)?/g)
+    ?.join("")
+    .toUpperCase() || "U"
+}
 
 const COLORS = {
   primary: '#1f64fc', 
@@ -47,7 +58,7 @@ export function GroupCard({ group, onEdit, onDelete }: GroupCardProps) {
     day: 'numeric', month: 'short', year: 'numeric'
   })
 
-  // ✅ TIPADO ESTRICTO AQUÍ: 'members' puede ser undefined, default a array vacío
+  // ✅ TIPADO ESTRICTO: Manejo seguro de arrays
   const membersList: GroupMember[] = group.members || []
   const displayedMembers = membersList.slice(0, 3)
   const extraCount = (group.member_count || 0) - 3
@@ -145,13 +156,14 @@ export function GroupCard({ group, onEdit, onDelete }: GroupCardProps) {
         </div>
 
         <div className="flex justify-between items-center w-full border-t border-slate-50 pt-2">
+           {/* AVATARES DE MIEMBROS */}
            <div className="flex -space-x-2 shrink-0 h-6">
-             {/* ✅ TIPADO ESTRICTO EN EL MAP: 'member' ahora es GroupMember */}
              {displayedMembers.map((member, idx) => (
                 <Avatar key={idx} className="h-6 w-6 border-2 border-white ring-1 ring-slate-100" title={member.email}>
                     <AvatarImage src={member.avatar_url || ""} />
+                    {/* ✅ FIX: Iniciales Robustas */}
                     <AvatarFallback className="text-[8px] bg-[#1f64fc]/10 text-[#1f64fc] font-bold">
-                      {(member.email || "U").substring(0,1).toUpperCase()}
+                      {getInitials(member.full_name || member.email || 'U')}
                     </AvatarFallback>
                 </Avatar>
              ))}
