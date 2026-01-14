@@ -1,4 +1,3 @@
-// ARCHIVO: src/app/emails/welcome.tsx
 import {
     Body,
     Button,
