@@ -15,24 +15,26 @@ export default async function SettingsPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // 2. Obtener Perfil Completo (AHORA CON LAS NUEVAS COLUMNAS)
+  // 2. Obtener Perfil Completo
   const { data: rawProfile } = await supabase
     .from('profiles')
     .select('full_name, avatar_url, bio, theme, email_notifications, ai_autotag') 
     .eq('id', user.id)
     .single()
 
-  // Convertimos al tipo UserProfile para evitar quejas de TypeScript
-  // Si algún campo es null, ponemos defaults seguros
+  // Convertimos al tipo UserProfile
   const profile: UserProfile = {
       id: user.id,
       email: user.email || "",
-      role: 'auditor', // o lo que corresponda
+      role: 'auditor', 
       full_name: rawProfile?.full_name || "",
       avatar_url: rawProfile?.avatar_url || "",
       bio: rawProfile?.bio || "",
-      // Nuevos campos con Fallbacks
-      theme: rawProfile?.theme || 'system',
+      
+      // --- CAMBIO CRÍTICO AQUÍ ---
+      // Si es null, forzamos 'light'. Nunca 'system'.
+      theme: rawProfile?.theme || 'light', 
+      
       email_notifications: rawProfile?.email_notifications ?? true,
       ai_autotag: rawProfile?.ai_autotag ?? true
   }
@@ -41,9 +43,9 @@ export default async function SettingsPage() {
   const { data: files } = await supabase
     .from('resources')
     .select('file_size')
-    .eq('created_by', user.id) // IMPORTANTE: Solo contar archivos del usuario
+    .eq('created_by', user.id)
     .gt('file_size', 0)
-    .is('deleted_at', null) // No contar archivos en papelera
+    .is('deleted_at', null)
 
   const totalBytesUsed = files?.reduce((acc, curr) => acc + (curr.file_size || 0), 0) || 0
 

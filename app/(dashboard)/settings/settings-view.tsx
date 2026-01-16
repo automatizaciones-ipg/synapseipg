@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { 
   User, Shield, Sparkles, HardDrive, 
-  LogOut, Loader2, Laptop, Camera, Trash2, AlertTriangle
+  LogOut, Loader2, Laptop, Camera, Trash2, AlertTriangle, Moon, Sun
 } from "lucide-react"
 
 import { toast } from "sonner"
@@ -57,7 +57,7 @@ export function SettingsView({ user, profile, storageUsed }: SettingsViewProps) 
   const router = useRouter()
   const supabase = createClient()
   
-  const { theme, setTheme, resolvedTheme } = useTheme()
+  const { theme, setTheme } = useTheme() // Quitamos resolvedTheme, no es necesario si forzamos el sistema
   const [mounted, setMounted] = useState(false)
 
   // Estados Locales
@@ -68,30 +68,48 @@ export function SettingsView({ user, profile, storageUsed }: SettingsViewProps) 
   const [aiAutoTag, setAiAutoTag] = useState(profile.ai_autotag)
   const [emailNotifs, setEmailNotifs] = useState(profile.email_notifications)
 
+  // --- ESTADO OPTIMISTA PARA EL TEMA ---
+  // Inicializamos basado en props para evitar el flash, luego sincronizamos
+  const [isDark, setIsDark] = useState(profile.theme === 'dark')
+
   const [loading, setLoading] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
-  const [isDeleting, setIsDeleting] = useState(false) // Estado para el borrado de cuenta
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const STORAGE_LIMIT = 500 * 1024 * 1024; 
   const storagePercentage = Math.min((storageUsed / STORAGE_LIMIT) * 100, 100)
 
-  // Sincronización robusta del tema
+  // Sincronización Inicial Robusta
   useEffect(() => {
     setMounted(true)
+    // Prioridad: Base de datos > LocalStorage existente > Light Default
     if (profile.theme && profile.theme !== 'system') {
         setTheme(profile.theme)
+        setIsDark(profile.theme === 'dark')
+    } else {
+        // Si por alguna razón es null, aseguramos light
+        setIsDark(theme === 'dark')
     }
-  }, [profile.theme, setTheme])
+  }, [profile.theme, setTheme, theme])
 
-  const isDarkMode = mounted && (theme === 'dark' || resolvedTheme === 'dark')
-
-  // --- LOGIC: THEME & PREFERENCES ---
+  // --- LOGIC: THEME & PREFERENCES (OPTIMISTIC UI) ---
   const handleThemeToggle = async (checked: boolean) => {
+    // 1. UI INSTANTÁNEA (Cero Lag)
+    setIsDark(checked)
     const newTheme = checked ? "dark" : "light"
+    
+    // 2. Aplicar tema (Next-Themes maneja el DOM)
     setTheme(newTheme)
-    try { await updateProfileSettings({ theme: newTheme }) } catch (error) { console.error(error) }
+
+    // 3. Persistir en DB (Asíncrono, no bloquea UI)
+    try { 
+        await updateProfileSettings({ theme: newTheme }) 
+    } catch (error) { 
+        console.error("Error guardando tema en DB", error)
+        // Opcional: Revertir si falla, aunque raramente vale la pena el parpadeo
+    }
   }
 
   const handlePreferenceToggle = async (type: 'email' | 'ai', value: boolean) => {
@@ -158,7 +176,7 @@ export function SettingsView({ user, profile, storageUsed }: SettingsViewProps) 
       }
   }
 
-  // --- LOGIC: LOGOUT (Igual al Sidebar) ---
+  // --- LOGIC: LOGOUT ---
   const handleLogout = async () => {
     await supabase.auth.signOut()
     toast.success("Sesión cerrada")
@@ -170,9 +188,7 @@ export function SettingsView({ user, profile, storageUsed }: SettingsViewProps) 
   const handleDeleteAccount = async () => {
     setIsDeleting(true)
     try {
-      // Llamamos a la función SQL 'delete_own_account'
       const { error } = await supabase.rpc('delete_own_account')
-      
       if (error) throw error
 
       toast.success("Cuenta eliminada permanentemente.")
@@ -251,10 +267,14 @@ export function SettingsView({ user, profile, storageUsed }: SettingsViewProps) 
                     <div className="space-y-0.5">
                       <Label className="text-base">Modo Oscuro</Label>
                       <p className="text-sm text-slate-500 dark:text-slate-400">
-                        Cambiar entre tema claro y oscuro.
+                        {isDark ? 'Activado' : 'Desactivado'}
                       </p>
                     </div>
-                    <Switch checked={isDarkMode} onCheckedChange={handleThemeToggle} />
+                    {/* USAMOS EL ESTADO LOCAL 'isDark' PARA LA RESPUESTA INSTANTÁNEA */}
+                    <Switch 
+                        checked={isDark} 
+                        onCheckedChange={handleThemeToggle} 
+                    />
                   </div>
                   <Separator />
                   <div className="flex items-center justify-between">
@@ -300,7 +320,6 @@ export function SettingsView({ user, profile, storageUsed }: SettingsViewProps) 
         </TabsContent>
 
         <TabsContent value="danger" className="mt-6 space-y-6">
-           {/* ZONA DE PELIGRO */}
            <Card className="border-red-100 bg-red-50/30 dark:bg-red-950/10 dark:border-red-900">
               <CardHeader>
                  <CardTitle className="text-red-600 flex items-center gap-2">
@@ -310,13 +329,11 @@ export function SettingsView({ user, profile, storageUsed }: SettingsViewProps) 
               </CardHeader>
               <CardContent className="space-y-4">
                  
-                 {/* 1. CERRAR SESIÓN (CORREGIDO) */}
                  <div className="flex items-center justify-between p-4 border border-red-200 rounded-lg bg-white dark:bg-slate-950 dark:border-red-900/50">
                     <div>
                        <h4 className="font-semibold text-slate-900 dark:text-white">Cerrar Sesión</h4>
                        <p className="text-sm text-slate-500 dark:text-slate-400">Finalizar tu sesión en este dispositivo.</p>
                     </div>
-                    {/* Botón directo, sin Form */}
                     <Button 
                         variant="outline" 
                         onClick={handleLogout}
@@ -327,7 +344,6 @@ export function SettingsView({ user, profile, storageUsed }: SettingsViewProps) 
                     </Button>
                  </div>
 
-                 {/* 2. ELIMINAR CUENTA (NUEVO) */}
                  <div className="flex items-center justify-between p-4 border border-red-200 rounded-lg bg-red-50 dark:bg-red-950/30 dark:border-red-900/50">
                     <div>
                        <h4 className="font-bold text-red-700 dark:text-red-400">Eliminar Cuenta</h4>
@@ -344,50 +360,47 @@ export function SettingsView({ user, profile, storageUsed }: SettingsViewProps) 
                         </Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent className="border-red-200">
-  <AlertDialogHeader>
-    <AlertDialogTitle className="flex items-center gap-2 text-red-600">
-      <AlertTriangle className="w-5 h-5" />
-      ¿Estás absolutamente seguro?
-    </AlertDialogTitle>
-    
-    {/* 1. Descripción simple (texto plano dentro del <p> automático) */}
-    <AlertDialogDescription>
-      Esta acción no se puede deshacer y es irreversible.
-    </AlertDialogDescription>
-  </AlertDialogHeader>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle className="flex items-center gap-2 text-red-600">
+                            <AlertTriangle className="w-5 h-5" />
+                            ¿Estás absolutamente seguro?
+                          </AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Esta acción no se puede deshacer y es irreversible.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
 
-  {/* 2. Contenido complejo (div y lista) FUERA de la Description para evitar error de hidratación */}
-  <div className="text-sm text-slate-600 dark:text-slate-400 space-y-2 mt-2">
-    <p>Esto eliminará permanentemente:</p>
-    <ul className="list-disc list-inside ml-2 space-y-1">
-        <li>Tu cuenta de usuario y perfil.</li>
-        <li>Todos los recursos y archivos que hayas subido.</li>
-        <li>Tus membresías en grupos.</li>
-        <li>Tus favoritos y configuraciones.</li>
-    </ul>
-  </div>
+                        <div className="text-sm text-slate-600 dark:text-slate-400 space-y-2 mt-2">
+                          <p>Esto eliminará permanentemente:</p>
+                          <ul className="list-disc list-inside ml-2 space-y-1">
+                              <li>Tu cuenta de usuario y perfil.</li>
+                              <li>Todos los recursos y archivos que hayas subido.</li>
+                              <li>Tus membresías en grupos.</li>
+                              <li>Tus favoritos y configuraciones.</li>
+                          </ul>
+                        </div>
 
-  <AlertDialogFooter className="mt-4">
-    <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
-    <AlertDialogAction 
-      onClick={(e) => {
-          e.preventDefault() 
-          handleDeleteAccount()
-      }}
-      disabled={isDeleting}
-      className="bg-red-600 hover:bg-red-700 focus:ring-red-600 text-white"
-    >
-      {isDeleting ? (
-          <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Eliminando...
-          </>
-      ) : (
-          "Sí, eliminar mi cuenta"
-      )}
-    </AlertDialogAction>
-  </AlertDialogFooter>
-</AlertDialogContent>
+                        <AlertDialogFooter className="mt-4">
+                          <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction 
+                            onClick={(e) => {
+                                e.preventDefault() 
+                                handleDeleteAccount()
+                            }}
+                            disabled={isDeleting}
+                            className="bg-red-600 hover:bg-red-700 focus:ring-red-600 text-white"
+                          >
+                            {isDeleting ? (
+                                <>
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                    Eliminando...
+                                </>
+                            ) : (
+                                "Sí, eliminar mi cuenta"
+                            )}
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
                     </AlertDialog>
 
                  </div>
