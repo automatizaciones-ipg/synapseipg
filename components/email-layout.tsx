@@ -1,4 +1,3 @@
-// ARCHIVO: src/emails/components/email-layout.tsx
 import * as React from 'react';
 import {
   Body,
@@ -10,6 +9,7 @@ import {
   Text,
   Tailwind,
   Hr,
+  Link,
 } from '@react-email/components';
 
 interface EmailLayoutProps {
@@ -18,42 +18,64 @@ interface EmailLayoutProps {
   children: React.ReactNode;
 }
 
+// Configuración de tema con tu color exacto
+const config = {
+  theme: {
+    extend: {
+      colors: {
+        brand: '#067DFE', // Tu azul institucional
+        brandDark: '#0056b3',
+        offwhite: '#f9fafb',
+        textMain: '#334155',
+        textMuted: '#64748b',
+      },
+    },
+  },
+};
+
 export const EmailLayout = ({ previewText, heading, children }: EmailLayoutProps) => {
   return (
     <Html>
       <Head />
       <Preview>{previewText}</Preview>
-      <Tailwind>
-        <Body className="bg-slate-50 font-sans px-2 py-10">
-          <Container className="bg-white border border-slate-200 rounded mx-auto p-5 max-w-[480px]">
-            {/* LOGO O TÍTULO */}
-            <Section className="mb-4">
-              <Text className="text-xl font-bold text-slate-900 m-0">
-                Synapse IPG
+      <Tailwind config={config}>
+        <Body className="bg-offwhite font-sans px-2 py-10 my-auto mx-auto">
+          <Container className="bg-white border border-slate-200 rounded-lg mx-auto p-8 max-w-[520px] shadow-sm">
+            
+            {/* LOGO TEXTUAL */}
+            <Section className="mb-6">
+              <Text className="text-2xl font-bold text-slate-900 m-0 text-center">
+                Synapse <span className="text-brand">IPG</span>
               </Text>
             </Section>
 
-            {/* TÍTULO DEL MENSAJE */}
+            {/* TÍTULO */}
             {heading && (
-                <Text className="text-xl text-slate-800 font-semibold mb-4">
-                  {heading}
-                </Text>
+              <Text className="text-xl text-slate-800 font-semibold mb-6 text-center">
+                {heading}
+              </Text>
             )}
 
-            {/* CONTENIDO DINÁMICO */}
+            {/* CONTENIDO */}
             <Section>
-                {children}
+              {children}
             </Section>
 
-            <Hr className="border-slate-200 my-6" />
+            <Hr className="border-slate-100 my-8" />
 
             {/* FOOTER */}
-            <Text className="text-xs text-slate-500 text-center">
-              Synapse IPG System - Notificaciones Automáticas
-            </Text>
+            <Section className="text-center">
+              <Text className="text-xs text-textMuted leading-5">
+                © {new Date().getFullYear()} Synapse IPG. Todos los derechos reservados.<br/>
+                <Link href="https://ipg.cl" className="text-brand no-underline">www.ipg.cl</Link>
+              </Text>
+            </Section>
+
           </Container>
         </Body>
       </Tailwind>
     </Html>
   );
 };
+
+export default EmailLayout;

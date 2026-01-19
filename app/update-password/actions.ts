@@ -2,25 +2,19 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { revalidatePath } from 'next/cache'
 
 export async function updatePassword(formData: FormData) {
   const password = formData.get('password') as string
   const confirmPassword = formData.get('confirmPassword') as string
 
-  if (!password || !confirmPassword) {
-    return { error: 'Por favor completa todos los campos' }
-  }
-
-  if (password !== confirmPassword) {
-    return { error: 'Las contraseñas no coinciden' }
-  }
-
-  if (password.length < 6) {
-    return { error: 'La contraseña debe tener al menos 6 caracteres' }
-  }
+  if (!password || !confirmPassword) return { error: 'Completa todos los campos' }
+  if (password !== confirmPassword) return { error: 'Las contraseñas no coinciden' }
+  if (password.length < 6) return { error: 'La contraseña debe tener mínimo 6 caracteres' }
 
   const supabase = await createClient()
 
+  // Supabase sabe qué usuario es porque el link del correo ya creó la sesión
   const { error } = await supabase.auth.updateUser({
     password: password
   })
@@ -29,7 +23,6 @@ export async function updatePassword(formData: FormData) {
     return { error: error.message }
   }
 
-  // Éxito: Redirigir al dashboard con un parámetro para mostrar toast de éxito si quieres,
-  // o simplemente redirigir.
-  redirect('/')
+  revalidatePath('/', 'layout')
+  redirect('/') // Redirige al home ya logueado
 }

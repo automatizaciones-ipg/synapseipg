@@ -1,13 +1,14 @@
-import { createClient } from '@/lib/supabase/server'
+// ARCHIVO: app/auth/callback/route.ts
 import { NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
 
 export async function GET(request: Request) {
-  // 1. Extracción segura de parámetros
+  // 1. Extracción segura de parámetros de la URL
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get('code')
   
   // 'next' es crítico: define a dónde va el usuario post-login.
-  // Si no viene, default a '/' (Dashboard)
+  // En tu caso, vendrá como '/update-password' desde el link del correo.
   const next = requestUrl.searchParams.get('next') ?? '/'
   
   // Capturamos el origen de la petición actual
@@ -19,9 +20,9 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     
     if (!error) {
-      // 3. LÓGICA DE REDIRECCIÓN INTELIGENTE
+      // 3. LÓGICA DE REDIRECCIÓN INTELIGENTE (Tu lógica es perfecta aquí)
       
-      // Detectamos si estamos detrás de un proxy (Vercel, AWS, etc)
+      // Detectamos si estamos detrás de un proxy (Vercel usa x-forwarded-host)
       const forwardedHost = request.headers.get('x-forwarded-host') 
       const isLocalEnv = process.env.NODE_ENV === 'development'
       
@@ -29,27 +30,26 @@ export async function GET(request: Request) {
       let finalRedirectUrl: string;
 
       if (isLocalEnv) {
-        // Desarrollo: Usamos el origen directo del navegador (HTTPS si así corre el server)
+        // Desarrollo: Usamos el origen directo del navegador
         finalRedirectUrl = `${origin}${next}`
       } else if (forwardedHost) {
-        // Producción: Forzamos HTTPS y usamos el dominio real
+        // Producción: Forzamos HTTPS y usamos el dominio real de Vercel
         finalRedirectUrl = `https://${forwardedHost}${next}`
       } else {
-        // Fallback: Usamos el origen detectado
+        // Fallback: Usamos el origen detectado por defecto
         finalRedirectUrl = `${origin}${next}`
       }
 
-      // 4. ÉXITO: Redirección final al formulario de cambio de clave
+      // 4. ÉXITO: Redirección final a la página de cambio de clave (/update-password)
+      // Al hacer esto, la cookie de sesión ya viaja con el usuario.
       return NextResponse.redirect(finalRedirectUrl)
-    } else {
-        // 🛑 DIAGNÓSTICO: Si falla el intercambio, lo vemos en consola server-side
-        console.error("❌ Auth Callback Error:", error.message)
-        
-        // Redirigimos con el error explícito para que sepas qué pasó
-        return NextResponse.redirect(`${origin}/login?error=auth_exchange_error&details=${encodeURIComponent(error.message)}`)
-    }
+    } 
+    
+    // 🛑 Manejo de error específico del intercambio
+    console.error("❌ Auth Callback Error:", error.message)
+    return NextResponse.redirect(`${origin}/login?error=auth_exchange_error`)
   }
 
-  // 5. Manejo de Errores (Sin código)
+  // 5. Si no hay código, devolvemos al login
   return NextResponse.redirect(`${origin}/login?error=no_code_provided`)
 }

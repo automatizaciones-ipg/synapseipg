@@ -8,11 +8,13 @@ import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { sendWelcomeEmailAction, sendPasswordResetEmailAction } from '@/actions/email-actions'
 
+// Interface estricta para respuestas de Server Actions
 interface AuthResponse {
   error?: string
   success?: string
 }
 
+// --- SCHEMAS DE VALIDACIÓN ---
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1, "Ingresa tu contraseña"),
@@ -30,7 +32,7 @@ const signupSchema = z.object({
   path: ["confirmPassword"],
 })
 
-// --- LOGIN ---
+// --- LÓGICA 1: LOGIN ---
 export async function login(formData: FormData): Promise<AuthResponse | void> {
   const supabase = await createClient()
   const data = Object.fromEntries(formData)
@@ -49,7 +51,7 @@ export async function login(formData: FormData): Promise<AuthResponse | void> {
   redirect('/')
 }
 
-// --- SIGNUP ---
+// --- LÓGICA 2: SIGNUP (REGISTRO) ---
 export async function signup(formData: FormData): Promise<AuthResponse | void> {
   const supabase = await createClient()
   const data = Object.fromEntries(formData)
@@ -60,6 +62,7 @@ export async function signup(formData: FormData): Promise<AuthResponse | void> {
   const email = data.email as string
   const fullName = data.full_name as string
 
+  // 1. Crear usuario en Supabase
   const { error, data: authData } = await supabase.auth.signUp({
     email: email,
     password: data.password as string,
@@ -70,8 +73,15 @@ export async function signup(formData: FormData): Promise<AuthResponse | void> {
 
   if (error) return { error: error.message }
 
+  // 2. Si se creó el usuario, enviar correo de Bienvenida
   if (authData.user) {
-      await sendWelcomeEmailAction(email, fullName)
+      // Llamada asíncrona segura. Capturamos el resultado pero no bloqueamos si falla el mail.
+      const emailResult = await sendWelcomeEmailAction(email, fullName)
+      
+      if (!emailResult.success) {
+          // Solo logueamos en servidor, no interrumpimos el flujo del usuario
+          console.error(`⚠️ Usuario creado, pero fallo envío de mail: ${emailResult.error}`);
+      }
   }
 
   if (authData.session) {
@@ -79,25 +89,40 @@ export async function signup(formData: FormData): Promise<AuthResponse | void> {
     redirect('/')
   }
 
-  return { success: "Cuenta creada. Revisa tu correo." }
+  return { success: "Cuenta creada exitosamente. Revisa tu correo." }
 }
 
-// --- RESET PASSWORD (CORE) ---
+// --- LÓGICA 3: RESET PASSWORD (RECUPERACIÓN) ---
 export async function resetPassword(formData: FormData): Promise<AuthResponse> {
-  const email = formData.get('email') as string
-  if (!email || !email.includes('@')) return { error: "Email inválido" }
+  const emailRaw = formData.get('email');
+  
+  // Type Guard simple: asegurar que email es string
+  if (!emailRaw || typeof emailRaw !== 'string' || !emailRaw.includes('@')) {
+      return { error: "Email inválido" }
+  }
 
+  const email = emailRaw; // Ahora TS sabe que es string seguro
+
+  // Validar variables de entorno críticas para Admin Client
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !serviceRoleKey) {
+      console.error("🔴 Error Config: Faltan variables de Supabase Admin");
+      return { error: "Error de configuración del servidor." };
+  }
+
+  // 1. Instanciar Supabase ADMIN
   const supabaseAdmin = createSupabaseAdmin(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    supabaseUrl,
+    serviceRoleKey,
     { auth: { autoRefreshToken: false, persistSession: false } }
   )
 
-  const origin = process.env.NEXT_PUBLIC_SITE_URL || 'https://localhost:3000'
-  
-  // ⚠️ CAMBIO IMPORTANTE: Redirigir a una página para poner la NUEVA clave
+  const origin = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
   const redirectTo = `${origin}/auth/callback?next=/update-password`
 
+  // 2. Generar el link
   const { data, error } = await supabaseAdmin.auth.admin.generateLink({
     type: 'recovery',
     email: email,
@@ -105,17 +130,21 @@ export async function resetPassword(formData: FormData): Promise<AuthResponse> {
   })
 
   if (error) {
-    console.error("Error generating recovery link:", error)
-    return { error: "No se pudo procesar la solicitud." }
+    console.error("Error generating recovery link:", error.message)
+    return { error: "No se pudo procesar la solicitud. Verifica el correo." }
   }
 
-  if (data && data.properties?.action_link) {
+  // 3. Enviar el link por Resend
+  if (data?.properties?.action_link) {
       const resetLink = data.properties.action_link
+      
       const emailResult = await sendPasswordResetEmailAction(email, resetLink)
       
       if (!emailResult.success) {
-          return { error: "Error al enviar el correo. Intenta nuevamente." }
+          return { error: "Error técnico enviando el correo. Intenta nuevamente." }
       }
+  } else {
+      return { error: "No se pudo generar el enlace de recuperación." }
   }
 
   return { success: "Enlace de recuperación enviado a tu correo." }
