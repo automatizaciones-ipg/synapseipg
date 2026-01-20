@@ -1,3 +1,4 @@
+// ARCHIVO: components/layout/sidebar.tsx
 'use client'
 
 import Link from 'next/link'
@@ -5,11 +6,11 @@ import { usePathname, useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { useSidebarStore } from '@/hooks/use-sidebar-store'
-import { 
-  LayoutDashboard, 
-  Users, 
-  Settings, 
-  LogOut, 
+import {
+  LayoutDashboard,
+  Users,
+  Settings,
+  LogOut,
   PlusCircle,
   ChevronLeft,
   Menu,
@@ -64,7 +65,7 @@ type NeuralDataType = {
   connections: ConnectionType[];
 }
 
-// --- 2. GENERADOR DE DATOS (Externo para pureza) ---
+// --- 2. GENERADOR DE DATOS ---
 const generateNeuralData = (): NeuralDataType => {
   const nodes: NodeType[] = Array.from({ length: 15 }).map((_, i) => ({
     id: i,
@@ -102,7 +103,7 @@ const generateNeuralData = (): NeuralDataType => {
   return { nodes, particles, connections };
 };
 
-// --- 3. COMPONENTE NEURONAL (Optimizado) ---
+// --- 3. COMPONENTE NEURONAL ---
 const NeuralVertical = () => {
   const [data, setData] = useState<NeuralDataType | null>(null);
 
@@ -129,33 +130,33 @@ const NeuralVertical = () => {
             <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
           </linearGradient>
           <filter id="glow-node">
-            <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
+            <feGaussianBlur stdDeviation="2.5" result="coloredBlur" />
             <feMerge>
-              <feMergeNode in="coloredBlur"/>
-              <feMergeNode in="SourceGraphic"/>
+              <feMergeNode in="coloredBlur" />
+              <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
         </defs>
 
         {connections.map((link) => (
-             <motion.line
-                key={link.id}
-                x1={`${link.x1}%`} y1={`${link.y1}%`}
-                x2={`${link.x2}%`} y2={`${link.y2}%`}
-                stroke="url(#synapse-gradient)"
-                strokeWidth="1"
-                initial={{ pathLength: 0, opacity: 0 }}
-                animate={{ 
-                  pathLength: [0.2, 1, 0.2],
-                  opacity: [0.1, 0.5, 0.1],
-                  strokeDashoffset: [0, -20]
-                }}
-                transition={{ 
-                  duration: link.duration, 
-                  repeat: Infinity, 
-                  ease: "linear" 
-                }}
-             />
+          <motion.line
+            key={link.id}
+            x1={`${link.x1}%`} y1={`${link.y1}%`}
+            x2={`${link.x2}%`} y2={`${link.y2}%`}
+            stroke="url(#synapse-gradient)"
+            strokeWidth="1"
+            initial={{ pathLength: 0, opacity: 0 }}
+            animate={{
+              pathLength: [0.2, 1, 0.2],
+              opacity: [0.1, 0.5, 0.1],
+              strokeDashoffset: [0, -20]
+            }}
+            transition={{
+              duration: link.duration,
+              repeat: Infinity,
+              ease: "linear"
+            }}
+          />
         ))}
 
         {nodes.map((node) => (
@@ -167,7 +168,7 @@ const NeuralVertical = () => {
             fill="#93c5fd"
             filter="url(#glow-node)"
             initial={{ opacity: 0, scale: 0 }}
-            animate={{ 
+            animate={{
               opacity: [0.3, 0.8, 0.3],
               scale: [1, 1.5, 1],
             }}
@@ -186,8 +187,8 @@ const NeuralVertical = () => {
             r="1"
             fill="#fff"
             initial={{ x: `${p.initialX}%`, y: "100%", opacity: 0 }}
-            animate={{ 
-              y: "0%", 
+            animate={{
+              y: "0%",
               opacity: [0, 1, 0],
               x: `${p.targetX}%`
             }}
@@ -231,106 +232,115 @@ export function Sidebar() {
   // CONTENIDO DESKTOP
   const menuJsx = (
     <div className="flex flex-col h-full text-white relative z-10">
-      
+
       {/* HEADER LOGO */}
       <div className={cn("p-6 flex items-center h-24 transition-all duration-500", isCollapsed ? "justify-center px-2" : "gap-4")}>
         <div className="relative group shrink-0">
-            <motion.div 
-                className="absolute inset-0 rounded-xl bg-blue-500/30 blur-md"
-                animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.6, 0.3] }}
-                transition={{ duration: 3, repeat: Infinity }}
+          <motion.div
+            className="absolute inset-0 rounded-xl bg-blue-500/30 blur-md"
+            animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.6, 0.3] }}
+            transition={{ duration: 3, repeat: Infinity }}
+          />
+          <motion.div
+            className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl flex items-center justify-center relative shadow-[0_0_15px_rgba(37,99,235,0.5)] border border-blue-400/30 z-10 overflow-hidden"
+            whileHover={{ scale: 1.05, rotate: 5 }}
+          >
+            <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            <Zap className="w-6 h-6 text-white fill-blue-100 drop-shadow-md" />
+            <motion.div
+              className="absolute top-0 -left-full w-full h-full bg-gradient-to-r from-transparent via-white/40 to-transparent skew-x-[-25deg]"
+              animate={{ left: ['-100%', '200%'] }}
+              transition={{ duration: 3, repeat: Infinity, ease: "easeInOut", delay: 1 }}
             />
-            <motion.div 
-                className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl flex items-center justify-center relative shadow-[0_0_15px_rgba(37,99,235,0.5)] border border-blue-400/30 z-10 overflow-hidden"
-                whileHover={{ scale: 1.05, rotate: 5 }}
-            >
-                <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                <Zap className="w-6 h-6 text-white fill-blue-100 drop-shadow-md" />
-                <motion.div
-                    className="absolute top-0 -left-full w-full h-full bg-gradient-to-r from-transparent via-white/40 to-transparent skew-x-[-25deg]"
-                    animate={{ left: ['-100%', '200%'] }}
-                    transition={{ duration: 3, repeat: Infinity, ease: "easeInOut", delay: 1 }}
-                />
-            </motion.div>
+          </motion.div>
         </div>
 
         {!isCollapsed && (
-            <div className="flex flex-col overflow-hidden">
-                <motion.span 
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.1 }}
-                    className="font-bold text-xl tracking-tight text-white leading-none mb-1"
-                >
-                    Recursos IPG
-                </motion.span>
-                <motion.div 
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.2 }}
-                    className="flex items-center gap-2"
-                >
-                    <div className="h-0.5 w-4 bg-blue-500 rounded-full" />
-                    <span className="text-[10px] font-medium text-blue-300 tracking-[0.2em] uppercase">System</span>
-                </motion.div>
-            </div>
+          <div className="flex flex-col overflow-hidden">
+            <motion.span
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.1 }}
+              className="font-bold text-xl tracking-tight text-white leading-none mb-1"
+            >
+              Synapse
+            </motion.span>
+            <motion.div
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.2 }}
+              className="flex items-center gap-2"
+            >
+              <div className="h-0.5 w-4 bg-blue-500 rounded-full" />
+              <span className="text-[10px] font-medium text-blue-300 tracking-[0.2em] uppercase">IPG</span>
+            </motion.div>
+          </div>
         )}
       </div>
 
       {/* NAV */}
       <nav className="flex-1 px-3 py-2 space-y-2 overflow-y-auto custom-scrollbar">
-        <div className="mb-6 px-1">
-          <Link href="/resources/new">
-             <Button 
+
+        {/* === CORRECCIÓN FINAL Y DEFINITIVA === */}
+        {/* Eliminamos el div wrapper con lógica de px. Usamos un div simple para margin. */}
+        {/* El botón replica EXACTAMENTE las dimensiones (w-10 h-10) y el mx-auto de los items. */}
+        <div className="mb-6 px-2">
+          <Link href="/resources/new" className="block group relative">
+            <Button
               className={cn(
-                  "w-full bg-blue-600 hover:bg-blue-500 hover:shadow-[0_0_20px_rgba(59,130,246,0.4)] transition-all duration-300 border border-blue-400/20 group relative overflow-hidden cursor-pointer", 
-                  isCollapsed ? "px-0 justify-center h-10 w-10 rounded-xl" : "justify-start gap-2 h-11"
-              )} 
+                "bg-blue-600 hover:bg-blue-500 hover:shadow-[0_0_20px_rgba(59,130,246,0.4)] transition-all duration-300 border border-blue-400/20 relative overflow-hidden cursor-pointer",
+                isCollapsed
+                  ? "w-10 h-10 p-0 mx-auto justify-center rounded-xl"
+                  : "w-full justify-start gap-2 h-11 px-4 py-3"
+              )}
               size={isCollapsed ? "icon" : "default"}
             >
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 ease-in-out" />
-              <PlusCircle className={cn("transition-transform duration-300", isCollapsed ? "w-6 h-6" : "w-5 h-5 group-hover:rotate-90")} />
+              {/* CAMBIO CLAVE: Icono w-5 h-5 (antes w-6) para que coincida EXACTO con los de abajo */}
+              <PlusCircle className={cn("transition-transform duration-300", isCollapsed ? "w-5 h-5" : "w-5 h-5 group-hover:rotate-90")} />
               {!isCollapsed && <span className="font-semibold tracking-wide">Nuevo Recurso</span>}
             </Button>
           </Link>
         </div>
+        {/* ===================================== */}
 
         <div className="space-y-1">
           {!isCollapsed && (
-              <motion.p 
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 select-none"
-              >
-                Menu Principal
-              </motion.p>
+            <motion.p
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+              className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 select-none"
+            >
+              Menu Principal
+            </motion.p>
           )}
-          
+
           {sidebarItems.map((item) => {
             const Icon = item.icon
             const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href))
-            
+
             return (
               <Link key={item.href} href={item.href} className="block group relative">
                 <div className={cn(
                   "flex items-center rounded-xl transition-all duration-300 relative overflow-hidden",
+                  // REFERENCIA: Así es como se alinean los otros. Hemos copiado esta lógica arriba.
                   isCollapsed ? "justify-center p-3 w-10 h-10 mx-auto" : "px-4 py-3 gap-3",
-                  isActive 
-                    ? "text-white bg-blue-900/30 border border-blue-500/30 shadow-[inset_0_0_15px_rgba(37,99,235,0.2)]" 
+                  isActive
+                    ? "text-white bg-blue-900/30 border border-blue-500/30 shadow-[inset_0_0_15px_rgba(37,99,235,0.2)]"
                     : "text-slate-400 hover:text-white hover:bg-white/5 border border-transparent"
                 )}>
                   {isActive && (
-                      <motion.div 
-                          layoutId="activeTab"
-                          className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500 shadow-[0_0_10px_#3b82f6]"
-                      />
+                    <motion.div
+                      layoutId="activeTab"
+                      className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500 shadow-[0_0_10px_#3b82f6]"
+                    />
                   )}
                   <Icon className={cn(
-                      "transition-all duration-300", 
-                      isActive ? "text-blue-400 drop-shadow-[0_0_5px_rgba(96,165,250,0.8)]" : "group-hover:text-blue-200",
-                      isCollapsed ? "w-5 h-5" : "w-5 h-5"
+                    "transition-all duration-300",
+                    isActive ? "text-blue-400 drop-shadow-[0_0_5px_rgba(96,165,250,0.8)]" : "group-hover:text-blue-200",
+                    isCollapsed ? "w-5 h-5" : "w-5 h-5"
                   )} />
                   {!isCollapsed && <span className={cn("text-sm font-medium", isActive ? "text-blue-50" : "")}>{item.label}</span>}
-                  
+
                   {isCollapsed && (
                     <div className="absolute left-14 bg-slate-900/90 backdrop-blur border border-slate-700 text-white text-xs px-3 py-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-nowrap shadow-xl translate-x-2 group-hover:translate-x-0 duration-200">
                       {item.label}
@@ -347,37 +357,36 @@ export function Sidebar() {
       {/* FOOTER */}
       <div className="p-3 mt-auto space-y-2 relative">
         <div className="absolute top-0 left-4 right-4 h-px bg-gradient-to-r from-transparent via-slate-700 to-transparent" />
-        
+
         <Link href="/trash" className="block group relative pt-2">
-            <div className={cn(
-                "flex items-center rounded-xl transition-all duration-300 relative overflow-hidden",
-                isCollapsed ? "justify-center p-3 w-10 h-10 mx-auto" : "px-4 py-3 gap-3",
-                pathname === '/trash' 
-                ? "text-white bg-blue-900/30 border border-blue-500/30 shadow-[inset_0_0_15px_rgba(37,99,235,0.2)]" 
-                : "text-slate-400 hover:text-white hover:bg-white/5 border border-transparent"
-            )}>
-                 {/* CORRECCIÓN VISUAL: Usamos layoutId para que coincida con el menú principal */}
-                 {pathname === '/trash' && (
-                    <motion.div 
-                        layoutId="activeTab"
-                        className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500 shadow-[0_0_10px_#3b82f6]"
-                    />
-                 )}
-                 
-                <Trash2 className={cn("w-5 h-5 transition-all duration-300", 
-                    pathname === '/trash' ? "text-blue-400 drop-shadow-[0_0_5px_rgba(96,165,250,0.8)]" : "group-hover:text-red-400"
-                )} />
-                {!isCollapsed && <span className={cn("text-sm font-medium", pathname === '/trash' ? "text-blue-50" : "")}>Papelera</span>}
-                
-                {isCollapsed && (
-                    <div className="absolute left-14 bg-slate-900/90 backdrop-blur border border-slate-700 text-white text-xs px-3 py-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-nowrap shadow-xl">
-                    Papelera
-                    </div>
-                )}
-            </div>
+          <div className={cn(
+            "flex items-center rounded-xl transition-all duration-300 relative overflow-hidden",
+            isCollapsed ? "justify-center p-3 w-10 h-10 mx-auto" : "px-4 py-3 gap-3",
+            pathname === '/trash'
+              ? "text-white bg-blue-900/30 border border-blue-500/30 shadow-[inset_0_0_15px_rgba(37,99,235,0.2)]"
+              : "text-slate-400 hover:text-white hover:bg-white/5 border border-transparent"
+          )}>
+            {pathname === '/trash' && (
+              <motion.div
+                layoutId="activeTab"
+                className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500 shadow-[0_0_10px_#3b82f6]"
+              />
+            )}
+
+            <Trash2 className={cn("w-5 h-5 transition-all duration-300",
+              pathname === '/trash' ? "text-blue-400 drop-shadow-[0_0_5px_rgba(96,165,250,0.8)]" : "group-hover:text-red-400"
+            )} />
+            {!isCollapsed && <span className={cn("text-sm font-medium", pathname === '/trash' ? "text-blue-50" : "")}>Papelera</span>}
+
+            {isCollapsed && (
+              <div className="absolute left-14 bg-slate-900/90 backdrop-blur border border-slate-700 text-white text-xs px-3 py-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 whitespace-nowrap shadow-xl">
+                Papelera
+              </div>
+            )}
+          </div>
         </Link>
 
-        <button 
+        <button
           onClick={handleLogout}
           className={cn(
             "flex items-center w-full rounded-xl text-sm font-medium text-slate-400 hover:text-red-400 hover:bg-red-500/10 hover:border-red-500/20 border border-transparent transition-all duration-300 cursor-pointer group",
@@ -389,13 +398,13 @@ export function Sidebar() {
         </button>
 
         {!isCollapsed && (
-           <motion.div 
-             initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-             className="px-4 pb-2 pt-2 text-[9px] text-slate-600 text-center leading-relaxed"
-           >
-                 <p className="font-semibold text-slate-500">Synapse IPG v1.0</p>
-                 <p className="opacity-70">Designed by Luis Rivera Araya IPG</p>
-           </motion.div>
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+            className="px-4 pb-2 pt-2 text-[9px] text-slate-600 text-center leading-relaxed"
+          >
+            <p className="font-semibold text-slate-500">Synapse IPG v1.0</p>
+            <p className="opacity-70">Designed by Luis Rivera Araya IPG</p>
+          </motion.div>
         )}
       </div>
     </div>
@@ -403,21 +412,20 @@ export function Sidebar() {
 
   return (
     <>
-      <aside 
+      <aside
         className={cn(
-            // CORRECCIÓN Z-INDEX: overflow-visible para que el botón sobresalga
-            "hidden md:flex flex-col h-screen fixed left-0 top-0 border-r border-slate-800 bg-[#0B1120] z-40 transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] shadow-2xl overflow-visible",
-            isCollapsed ? "w-[84px]" : "w-72"
+          "hidden md:flex flex-col h-screen fixed left-0 top-0 border-r border-slate-800 bg-[#0B1120] z-40 transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] shadow-2xl overflow-visible",
+          isCollapsed ? "w-[84px]" : "w-72"
         )}
       >
-        {/* Wrapper interno para CORTAR el contenido (fondo, scroll) pero NO el botón */}
+        {/* Wrapper interno para recortar contenido */}
         <div className="flex flex-col h-full w-full relative overflow-hidden">
-            <NeuralVertical />
-            {menuJsx}
+          <NeuralVertical />
+          {menuJsx}
         </div>
 
-        {/* El botón ahora vive FUERA del wrapper con overflow-hidden, pero dentro del aside */}
-        <button 
+        {/* Botón de colapso externo */}
+        <button
           onClick={toggle}
           className="absolute -right-3 top-10 bg-blue-600 hover:bg-blue-500 text-white rounded-full p-1.5 shadow-[0_0_10px_rgba(37,99,235,0.5)] transition-all border-4 border-[#0B1120] z-50 group"
         >
@@ -428,7 +436,7 @@ export function Sidebar() {
   )
 }
 
-// --- MOBILE SIDEBAR (Sin cambios, solo para completar el archivo) ---
+// --- MOBILE SIDEBAR ---
 export function MobileSidebar() {
   const [open, setOpen] = useState(false)
   const supabase = createClient()
@@ -436,94 +444,94 @@ export function MobileSidebar() {
   const pathname = usePathname()
 
   async function handleLogout() {
-      await supabase.auth.signOut()
-      router.push('/login')
+    await supabase.auth.signOut()
+    router.push('/login')
   }
 
   return (
-      <Sheet open={open} onOpenChange={setOpen}>
-          <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="md:hidden text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
-                  <Menu className="w-6 h-6" />
-              </Button>
-          </SheetTrigger>
-          <SheetContent side="left" className="p-0 bg-[#0B1120] border-r-slate-800 w-80 text-white overflow-hidden border-r border-white/10">
-              <NeuralVertical />
-              <div className="relative z-10 flex flex-col h-full bg-[#0B1120]/40 backdrop-blur-sm">
-                  <SheetHeader className="p-6 text-left border-b border-white/5">
-                      <SheetTitle className="text-white flex items-center gap-3">
-                          <div className="relative">
-                            <div className="absolute inset-0 bg-blue-500/20 blur-md rounded-full animate-pulse" />
-                            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl flex items-center justify-center relative shadow-lg border border-white/10">
-                                <Zap className="w-5 h-5 text-white" />
-                            </div>
-                          </div>
-                          <div className="flex flex-col">
-                             <span className="font-bold text-lg tracking-tight">Recursos IPG</span>
-                             <span className="text-[10px] text-blue-400 tracking-wider font-medium">SYNAPSE MOBILE</span>
-                          </div>
-                      </SheetTitle>
-                  </SheetHeader>
-
-                  <div className="flex flex-col h-full pb-6 overflow-y-auto custom-scrollbar">
-                        <div className="px-4 mt-6 mb-4">
-                          <Link href="/resources/new" onClick={() => setOpen(false)}>
-                              <Button 
-                                  className="w-full justify-start gap-3 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-600/30 hover:border-blue-500 transition-all shadow-sm h-12"
-                              >
-                                  <PlusCircle className="w-5 h-5" />
-                                  <span className="font-semibold">Nuevo Recurso</span>
-                              </Button>
-                          </Link>
-                        </div>
-                        <nav className="flex-1 px-4 space-y-2">
-                          <p className="px-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Navegación</p>
-                          {sidebarItems.map((item) => {
-                              const isActive = pathname === item.href
-                              return (
-                                  <Link 
-                                      key={item.href} 
-                                      href={item.href} 
-                                      onClick={() => setOpen(false)}
-                                      className="block"
-                                  >
-                                      <div className={cn(
-                                          "flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all",
-                                          isActive 
-                                          ? "bg-gradient-to-r from-blue-900/40 to-transparent border-l-2 border-blue-500 text-white" 
-                                          : "text-slate-400 hover:text-white hover:bg-white/5"
-                                      )}>
-                                          <item.icon className={cn("w-5 h-5", isActive && "text-blue-400 drop-shadow-[0_0_5px_rgba(59,130,246,0.5)]")} />
-                                          <span className="font-medium">{item.label}</span>
-                                      </div>
-                                  </Link>
-                              )
-                          })}
-                        </nav>
-                        <div className="p-4 border-t border-white/5 mt-auto space-y-2 bg-slate-900/20">
-                            <Link href="/trash" onClick={() => setOpen(false)}>
-                              <div className={cn(
-                                  "flex items-center gap-4 px-4 py-3 rounded-xl mb-2 cursor-pointer transition-all",
-                                  pathname === '/trash' 
-                                  ? "bg-blue-900/20 text-blue-200 border border-blue-500/20" 
-                                  : "text-slate-400 hover:text-white hover:bg-white/5"
-                              )}>
-                                  <Trash2 className={cn("w-5 h-5", pathname === '/trash' && "text-blue-400")} />
-                                  <span className="font-medium">Papelera</span>
-                              </div>
-                            </Link>
-                            <button onClick={handleLogout} className="flex items-center gap-4 w-full px-4 py-3 text-slate-400 hover:text-red-400 hover:bg-red-950/20 rounded-xl cursor-pointer transition-colors border border-transparent hover:border-red-900/30">
-                               <LogOut className="w-5 h-5" /> 
-                               <span className="font-medium">Cerrar Sesión</span>
-                            </button>
-                            <div className="px-4 pt-6 text-[10px] text-slate-600 text-center">
-                               <p className="font-bold opacity-50">Synapse IPG v1.0</p>
-                               <p className="opacity-40">Designed by Luis Rivera Araya</p>
-                            </div>
-                        </div>
-                  </div>
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger asChild>
+        <Button variant="ghost" size="icon" className="md:hidden text-slate-400 hover:text-white hover:bg-slate-800 transition-colors">
+          <Menu className="w-6 h-6" />
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="left" className="p-0 bg-[#0B1120] border-r-slate-800 w-80 text-white overflow-hidden border-r border-white/10">
+        <NeuralVertical />
+        <div className="relative z-10 flex flex-col h-full bg-[#0B1120]/40 backdrop-blur-sm">
+          <SheetHeader className="p-6 text-left border-b border-white/5">
+            <SheetTitle className="text-white flex items-center gap-3">
+              <div className="relative">
+                <div className="absolute inset-0 bg-blue-500/20 blur-md rounded-full animate-pulse" />
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl flex items-center justify-center relative shadow-lg border border-white/10">
+                  <Zap className="w-5 h-5 text-white" />
+                </div>
               </div>
-          </SheetContent>
-      </Sheet>
+              <div className="flex flex-col">
+                <span className="font-bold text-lg tracking-tight">Recursos IPG</span>
+                <span className="text-[10px] text-blue-400 tracking-wider font-medium">SYNAPSE MOBILE</span>
+              </div>
+            </SheetTitle>
+          </SheetHeader>
+
+          <div className="flex flex-col h-full pb-6 overflow-y-auto custom-scrollbar">
+            <div className="px-4 mt-6 mb-4">
+              <Link href="/resources/new" onClick={() => setOpen(false)}>
+                <Button
+                  className="w-full justify-start gap-3 bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 border border-blue-600/30 hover:border-blue-500 transition-all shadow-sm h-12"
+                >
+                  <PlusCircle className="w-5 h-5" />
+                  <span className="font-semibold">Nuevo Recurso</span>
+                </Button>
+              </Link>
+            </div>
+            <nav className="flex-1 px-4 space-y-2">
+              <p className="px-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Navegación</p>
+              {sidebarItems.map((item) => {
+                const isActive = pathname === item.href
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setOpen(false)}
+                    className="block"
+                  >
+                    <div className={cn(
+                      "flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all",
+                      isActive
+                        ? "bg-gradient-to-r from-blue-900/40 to-transparent border-l-2 border-blue-500 text-white"
+                        : "text-slate-400 hover:text-white hover:bg-white/5"
+                    )}>
+                      <item.icon className={cn("w-5 h-5", isActive && "text-blue-400 drop-shadow-[0_0_5px_rgba(59,130,246,0.5)]")} />
+                      <span className="font-medium">{item.label}</span>
+                    </div>
+                  </Link>
+                )
+              })}
+            </nav>
+            <div className="p-4 border-t border-white/5 mt-auto space-y-2 bg-slate-900/20">
+              <Link href="/trash" onClick={() => setOpen(false)}>
+                <div className={cn(
+                  "flex items-center gap-4 px-4 py-3 rounded-xl mb-2 cursor-pointer transition-all",
+                  pathname === '/trash'
+                    ? "bg-blue-900/20 text-blue-200 border border-blue-500/20"
+                    : "text-slate-400 hover:text-white hover:bg-white/5"
+                )}>
+                  <Trash2 className={cn("w-5 h-5", pathname === '/trash' && "text-blue-400")} />
+                  <span className="font-medium">Papelera</span>
+                </div>
+              </Link>
+              <button onClick={handleLogout} className="flex items-center gap-4 w-full px-4 py-3 text-slate-400 hover:text-red-400 hover:bg-red-950/20 rounded-xl cursor-pointer transition-colors border border-transparent hover:border-red-900/30">
+                <LogOut className="w-5 h-5" />
+                <span className="font-medium">Cerrar Sesión</span>
+              </button>
+              <div className="px-4 pt-6 text-[10px] text-slate-600 text-center">
+                <p className="font-bold opacity-50">Synapse IPG v1.0</p>
+                <p className="opacity-40">Designed by Luis Rivera Araya</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
   )
 }
