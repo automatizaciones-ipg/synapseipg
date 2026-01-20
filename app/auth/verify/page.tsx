@@ -1,11 +1,10 @@
 'use client'
 
-import { useEffect, useState, Suspense } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
-// 1. COMPONENTE INTERNO: Contiene TODA tu lógica original
-function VerifyContent() {
+export default function VerifyPage() {
     const [status, setStatus] = useState('Validando sesión segura...')
     const router = useRouter()
     const searchParams = useSearchParams()
@@ -16,6 +15,8 @@ function VerifyContent() {
             console.log("🔒 Iniciando verificación de sesión...")
 
             // PASO 1: Verificación de Cookie (PRIORIDAD ALTA)
+            // Si vienes de /auth/callback (como muestra tu log), la sesión YA existe en la cookie.
+            // No necesitamos leer la URL, solo preguntar a Supabase quién es el usuario actual.
             const { data: { session }, error: sessionError } = await supabase.auth.getSession()
 
             if (session) {
@@ -26,6 +27,7 @@ function VerifyContent() {
             }
 
             // PASO 2: Verificación de Código PKCE (Respaldo)
+            // Si por alguna razón el callback falló pero traemos un código en la URL (?code=...)
             const code = searchParams.get('code')
             if (code) {
                 setStatus('Canjeando código de autorización...')
@@ -39,6 +41,7 @@ function VerifyContent() {
             }
 
             // PASO 3: Verificación de Hash (Legacy/Respaldo final)
+            // Solo si falló la cookie y no hay código, miramos el hash (#access_token=...)
             const hash = window.location.hash
             if (hash && hash.includes('access_token')) {
                 setStatus('Procesando token de acceso...')
@@ -90,30 +93,5 @@ function VerifyContent() {
                 )}
             </div>
         </div>
-    )
-}
-
-// 2. COMPONENTE DE CARGA VISUAL (Para el Suspense)
-// Es idéntico visualmente a tu estado inicial para evitar parpadeos
-function VerifyFallback() {
-    return (
-        <div className="flex h-screen w-full flex-col items-center justify-center bg-gray-50">
-            <div className="w-full max-w-md rounded-lg bg-white p-8 shadow-lg text-center border border-gray-100">
-                <h2 className="text-xl font-bold mb-4 text-gray-800">Cargando verificación...</h2>
-                <div className="flex justify-center mb-6">
-                    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
-                </div>
-            </div>
-        </div>
-    )
-}
-
-// 3. COMPONENTE PRINCIPAL (EXPORT DEFAULT)
-// Este es el envoltorio que pide Next.js para buildear correctamente
-export default function VerifyPage() {
-    return (
-        <Suspense fallback={<VerifyFallback />}>
-            <VerifyContent />
-        </Suspense>
     )
 }
