@@ -3,6 +3,8 @@
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { ResourceData, LibraryResource } from "@/components/resources/new-resource-types"
+// IMPORTACIÓN AÑADIDA
+import { sendSharingNotification } from '@/actions/notifications';
 
 // DEFINICIÓN DE RESPUESTA ESTÁNDAR
 export type ActionResponse = {
@@ -15,12 +17,12 @@ export interface EditResourcePayload {
   title: string
   description?: string
   category?: string
-  tags?: string[] 
-  link?: string   
+  tags?: string[]
+  link?: string
 }
 
 // -----------------------------------------------------------------------------
-// 1. GUARDAR RECURSO (INTACTO)
+// 1. GUARDAR RECURSO (CON INYECCIÓN DE NOTIFICACIONES)
 // -----------------------------------------------------------------------------
 export async function saveResource(data: ResourceData) {
   const supabase = await createClient()
@@ -34,9 +36,9 @@ export async function saveResource(data: ResourceData) {
   if (targetFolderId === 'null' || targetFolderId === '') targetFolderId = null;
 
   // 3. Lógica de Visibilidad
-  const hasShares = (data.shared_with && data.shared_with.length > 0) || 
-                    (data.shared_groups && data.shared_groups.length > 0);
-  
+  const hasShares = (data.shared_with && data.shared_with.length > 0) ||
+    (data.shared_groups && data.shared_groups.length > 0);
+
   const isPublic = data.is_public !== undefined ? data.is_public : !hasShares;
 
   console.log(`💾 Guardando Recurso. Creador: ${user.id} | Visibilidad: ${isPublic ? 'PÚBLICA' : 'PRIVADA'}`);
@@ -53,13 +55,13 @@ export async function saveResource(data: ResourceData) {
       file_path: data.file_path || null,
       file_type: data.file_type || 'link',
       file_size: data.file_size || 0,
-      dominant_color: data.color, 
+      dominant_color: data.color,
       created_by: user.id,
       version: 1,
-      is_public: isPublic, 
-      folder_id: targetFolderId 
+      is_public: isPublic,
+      folder_id: targetFolderId
     })
-    .select('id') 
+    .select('id')
     .single()
 
   if (error) {
@@ -69,31 +71,56 @@ export async function saveResource(data: ResourceData) {
 
   // 5. GESTIÓN DE COMPARTIDOS
   if (!isPublic) {
-      const resourceId = newResource.id;
-      const promises = [];
+    const resourceId = newResource.id;
+    const promises = [];
 
-      // A. Usuarios Individuales
-      if (data.shared_with && data.shared_with.length > 0) {
-          const userShares = data.shared_with.map((uid: string) => ({
-              resource_id: resourceId,
-              user_id: uid
-          }));
-          promises.push(supabase.from('resource_shares').insert(userShares));
-      }
+    // A. Usuarios Individuales
+    if (data.shared_with && data.shared_with.length > 0) {
+      const userShares = data.shared_with.map((uid: string) => ({
+        resource_id: resourceId,
+        user_id: uid
+      }));
+      promises.push(supabase.from('resource_shares').insert(userShares));
+    }
 
-      // B. Grupos
-      if (data.shared_groups && data.shared_groups.length > 0) {
-          const groupShares = data.shared_groups.map((gid: string) => ({
-              resource_id: resourceId,
-              group_id: gid
-          }));
-          promises.push(supabase.from('resource_group_shares').insert(groupShares));
-      }
+    // B. Grupos
+    if (data.shared_groups && data.shared_groups.length > 0) {
+      const groupShares = data.shared_groups.map((gid: string) => ({
+        resource_id: resourceId,
+        group_id: gid
+      }));
+      promises.push(supabase.from('resource_group_shares').insert(groupShares));
+    }
 
-      if (promises.length > 0) {
-          await Promise.all(promises);
-          console.log(`✅ Permisos guardados.`);
+    if (promises.length > 0) {
+      await Promise.all(promises);
+      console.log(`✅ Permisos guardados.`);
+
+      // --- 🔥 INICIO INYECCIÓN QUIRÚRGICA ---
+      // Solo ejecutamos si hay con quién compartir
+      if (hasShares) {
+        // 1. Obtenemos nombre del remitente
+        const { data: senderProfile } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', user.id)
+          .single();
+
+        const senderName = senderProfile?.full_name || 'Un usuario';
+
+        // 2. Disparamos la notificación
+        // Usamos await para asegurar que se envíe antes de retornar éxito al usuario
+        await sendSharingNotification({
+          resourceId: newResource.id,
+          resourceTitle: data.title,
+          senderName: senderName,
+          senderId: user.id,
+          targetUserIds: data.shared_with || [],
+          targetGroupIds: data.shared_groups || []
+        });
       }
+      // --- FIN INYECCIÓN ---
+    }
   }
 
   revalidatePath('/', 'layout')
@@ -101,13 +128,13 @@ export async function saveResource(data: ResourceData) {
 }
 
 // -----------------------------------------------------------------------------
-// 2. LECTURA DE RECURSOS (MODIFICADO: Filtro deleted_at)
+// 2. LECTURA DE RECURSOS (INTACTO)
 // -----------------------------------------------------------------------------
 export async function getFilesForView(
-    viewType: 'HOME' | 'SHARED', 
-    folderId: string | null = null
+  viewType: 'HOME' | 'SHARED',
+  folderId: string | null = null
 ): Promise<LibraryResource[]> {
-    
+
   const supabase = await createClient();
 
   let query = supabase
@@ -115,7 +142,7 @@ export async function getFilesForView(
     .select('*')
     // --- NUEVO: FILTRO DE SEGURIDAD PARA INICIO ---
     // Aseguramos que NO traiga los que tienen fecha de borrado
-    .is('deleted_at', null) 
+    .is('deleted_at', null)
     // -----------------------------------------------
     .order('created_at', { ascending: false });
 
@@ -130,12 +157,12 @@ export async function getFilesForView(
   }
 
   const { data, error } = await query;
-  
+
   if (error) {
     console.error("Error fetching view:", error);
     return [];
   }
-  
+
   return data as LibraryResource[];
 }
 
@@ -144,7 +171,7 @@ export async function getFilesForView(
 // -----------------------------------------------------------------------------
 export async function updateResource(resourceId: string, payload: EditResourcePayload): Promise<ActionResponse> {
   const supabase = await createClient()
-  
+
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, message: "No autorizado." }
 
@@ -168,22 +195,22 @@ export async function updateResource(resourceId: string, payload: EditResourcePa
     category?: string
     tags?: string[]
     updated_at: string
-    file_url?: string 
+    file_url?: string
   }
 
-  const updates: ResourceUpdateDB = { 
-    title: payload.title, 
+  const updates: ResourceUpdateDB = {
+    title: payload.title,
     description: payload.description,
     category: payload.category,
-    tags: payload.tags, 
-    updated_at: new Date().toISOString() 
+    tags: payload.tags,
+    updated_at: new Date().toISOString()
   }
 
   if (payload.link !== undefined) {
     if (currentResource.file_type === 'link') {
-       updates.file_url = payload.link
+      updates.file_url = payload.link
     } else {
-       console.log("🔒 Edición de URL omitida: El recurso es un archivo.")
+      console.log("🔒 Edición de URL omitida: El recurso es un archivo.")
     }
   }
 
@@ -194,12 +221,12 @@ export async function updateResource(resourceId: string, payload: EditResourcePa
     .select()
 
   if (error) {
-      console.error("❌ Error Update:", error.message)
-      return { success: false, message: error.message }
+    console.error("❌ Error Update:", error.message)
+    return { success: false, message: error.message }
   }
 
   if (!data || data.length === 0) {
-      return { success: false, message: "No se encontró el recurso o no tienes permiso." }
+    return { success: false, message: "No se encontró el recurso o no tienes permiso." }
   }
 
   revalidatePath('/', 'layout')
@@ -211,7 +238,7 @@ export async function updateResource(resourceId: string, payload: EditResourcePa
 // -----------------------------------------------------------------------------
 export async function deleteResource(resourceId: string): Promise<ActionResponse> {
   const supabase = await createClient()
-  
+
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, message: "No autorizado." }
 
@@ -219,9 +246,9 @@ export async function deleteResource(resourceId: string): Promise<ActionResponse
 
   const { error, data } = await supabase
     .from('resources')
-    .update({ 
-        deleted_at: new Date().toISOString(), 
-        deleted_by: user.id                   
+    .update({
+      deleted_at: new Date().toISOString(),
+      deleted_by: user.id
     })
     .eq('id', resourceId)
     .select()
@@ -232,7 +259,7 @@ export async function deleteResource(resourceId: string): Promise<ActionResponse
   }
 
   if (!data || data.length === 0) {
-      return { success: false, message: "No se encontró el recurso." }
+    return { success: false, message: "No se encontró el recurso." }
   }
 
   console.log("✅ Recurso enviado a papelera correctamente.")
@@ -243,7 +270,7 @@ export async function deleteResource(resourceId: string): Promise<ActionResponse
 
 
 // -----------------------------------------------------------------------------
-// 5. GESTIÓN DE PAPELERA (NUEVO - REQUERIMIENTO)
+// 5. GESTIÓN DE PAPELERA (INTACTO)
 // -----------------------------------------------------------------------------
 
 // A. OBTENER RECURSOS EN PAPELERA
@@ -253,18 +280,14 @@ export async function getTrashedResources() {
 
   if (!user) return { success: false, data: [] }
 
-  // Consultamos la tabla resources directamente para obtener metadatos de borrado
   const { data, error } = await supabase
     .from('resources')
     .select(`
       *,
       profile:profiles!created_by(full_name, email), 
       deleter:profiles!deleted_by(full_name) 
-    `) 
-    // CONDICIÓN 1: Que ESTÉ eliminado (Soft Delete activo)
+    `)
     .not('deleted_at', 'is', null)
-    // CONDICIÓN 2: Seguridad (Solo mis recursos o recursos públicos/compartidos que borré)
-    // Nota: Simplificamos a "creados por mí" o "públicos" para la vista general de papelera
     .or(`is_public.eq.true,created_by.eq.${user.id}`)
     .order('deleted_at', { ascending: false })
 
@@ -279,17 +302,17 @@ export async function getTrashedResources() {
 // B. RESTAURAR RECURSO
 export async function restoreResource(resourceId: string) {
   const supabase = await createClient()
-  
+
   const { error } = await supabase
     .from('resources')
-    .update({ 
-      deleted_at: null, 
-      deleted_by: null 
+    .update({
+      deleted_at: null,
+      deleted_by: null
     })
     .eq('id', resourceId)
 
   if (error) return { success: false, message: error.message }
-  
+
   revalidatePath('/dashboard')
   revalidatePath('/dashboard/trash')
   return { success: true, message: "Recurso restaurado correctamente" }
@@ -299,24 +322,21 @@ export async function restoreResource(resourceId: string) {
 export async function deletePermanently(resourceId: string) {
   const supabase = await createClient()
 
-  // 1. Obtener info del archivo antes de borrar el registro
   const { data: resource } = await supabase
     .from('resources')
     .select('file_path, file_type')
     .eq('id', resourceId)
     .single()
 
-  // 2. Si hay archivo físico en Storage, eliminarlo
   if (resource?.file_path && resource.file_type !== 'link') {
     const { error: storageError } = await supabase
       .storage
-      .from('files') // Asegúrate que tu bucket se llama 'files'
+      .from('files')
       .remove([resource.file_path])
-    
+
     if (storageError) console.error("⚠️ Error borrando archivo físico:", storageError)
   }
 
-  // 3. Borrar registro de BD definitivamente
   const { error } = await supabase
     .from('resources')
     .delete()
@@ -334,7 +354,7 @@ export async function deletePermanently(resourceId: string) {
 
 export async function toggleFavorite(resourceId: string) {
   const supabase = await createClient()
-  
+
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error("Usuario no autenticado")
 
@@ -352,17 +372,17 @@ export async function toggleFavorite(resourceId: string) {
     const { error: insertError } = await supabase
       .from('favorites')
       .insert({ user_id: user.id, resource_id: resourceId })
-    
+
     if (insertError) {
-        console.error("Error insertando favorito:", insertError.message)
-        throw new Error(insertError.message)
+      console.error("Error insertando favorito:", insertError.message)
+      throw new Error(insertError.message)
     }
   }
 
-  revalidatePath('/', 'layout') 
+  revalidatePath('/', 'layout')
 }
 
 export async function incrementView(resourceId: string) {
   const supabase = await createClient()
-  await supabase.rpc('increment_downloads', { resource_id: resourceId }) 
+  await supabase.rpc('increment_downloads', { resource_id: resourceId })
 }

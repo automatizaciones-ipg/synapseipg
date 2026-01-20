@@ -37,7 +37,7 @@ export async function login(formData: FormData): Promise<AuthResponse | void> {
   const supabase = await createClient()
   const data = Object.fromEntries(formData)
   const validated = loginSchema.safeParse(data)
-  
+
   if (!validated.success) return { error: validated.error.issues[0].message }
 
   const { error } = await supabase.auth.signInWithPassword({
@@ -75,13 +75,12 @@ export async function signup(formData: FormData): Promise<AuthResponse | void> {
 
   // 2. Si se creó el usuario, enviar correo de Bienvenida
   if (authData.user) {
-      // Llamada asíncrona segura. Capturamos el resultado pero no bloqueamos si falla el mail.
-      const emailResult = await sendWelcomeEmailAction(email, fullName)
-      
-      if (!emailResult.success) {
-          // Solo logueamos en servidor, no interrumpimos el flujo del usuario
-          console.error(`⚠️ Usuario creado, pero fallo envío de mail: ${emailResult.error}`);
-      }
+    // Llamada asíncrona segura.
+    const emailResult = await sendWelcomeEmailAction(email, fullName)
+
+    if (!emailResult.success) {
+      console.error(`⚠️ Usuario creado, pero fallo envío de mail: ${emailResult.error}`);
+    }
   }
 
   if (authData.session) {
@@ -95,57 +94,71 @@ export async function signup(formData: FormData): Promise<AuthResponse | void> {
 // --- LÓGICA 3: RESET PASSWORD (RECUPERACIÓN) ---
 export async function resetPassword(formData: FormData): Promise<AuthResponse> {
   const emailRaw = formData.get('email');
-  
-  // Type Guard simple: asegurar que email es string
+
+  // Limpieza y validación básica
   if (!emailRaw || typeof emailRaw !== 'string' || !emailRaw.includes('@')) {
-      return { error: "Email inválido" }
+    return { error: "Email inválido" }
   }
 
-  const email = emailRaw; // Ahora TS sabe que es string seguro
+  const email = emailRaw.trim(); // Trim para evitar espacios accidentales
 
   // Validar variables de entorno críticas para Admin Client
+  // NECESITAS ESTA VARIABLE EN TU .ENV.LOCAL PARA QUE FUNCIONE EL "GENERATE LINK"
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !serviceRoleKey) {
-      console.error("🔴 Error Config: Faltan variables de Supabase Admin");
-      return { error: "Error de configuración del servidor." };
+    console.error("🔴 Error Config: Faltan variables de Supabase Admin (URL o Service Role Key)");
+    return { error: "Error de configuración del servidor." };
   }
 
-  // 1. Instanciar Supabase ADMIN
+  // 1. Instanciar Supabase ADMIN (Permisos elevados para generar links)
   const supabaseAdmin = createSupabaseAdmin(
     supabaseUrl,
     serviceRoleKey,
     { auth: { autoRefreshToken: false, persistSession: false } }
   )
 
-  const origin = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
-  const redirectTo = `${origin}/auth/callback?next=/update-password`
+  // 2. Construcción ROBUSTA de la URL de redirección
+  // Usamos NEXT_PUBLIC_SITE_URL para saber si estamos en local o prod
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
 
-  // 2. Generar el link
+  // ⚡️ CAMBIO QUIRÚRGICO: Apuntamos a la nueva página de verificación (/auth/verify)
+  // Esta página procesará el HASH (#access_token=...) en el cliente.
+  const redirectTo = `${siteUrl}/auth/verify`
+
+  console.log(`🔹 Generando link de recuperación para: ${email}`);
+  console.log(`🔹 RedirectTo configurado: ${redirectTo}`);
+
+  // 3. Generar el link
   const { data, error } = await supabaseAdmin.auth.admin.generateLink({
     type: 'recovery',
     email: email,
-    options: { redirectTo }
+    options: {
+      redirectTo: redirectTo
+    }
   })
 
   if (error) {
-    console.error("Error generating recovery link:", error.message)
+    console.error("❌ Error generating recovery link:", error.message)
+    // Mensaje genérico al usuario por seguridad, log detallado en consola
     return { error: "No se pudo procesar la solicitud. Verifica el correo." }
   }
 
-  // 3. Enviar el link por Resend
+  // 4. Enviar el link por Resend
   if (data?.properties?.action_link) {
-      const resetLink = data.properties.action_link
-      
-      const emailResult = await sendPasswordResetEmailAction(email, resetLink)
-      
-      if (!emailResult.success) {
-          return { error: "Error técnico enviando el correo. Intenta nuevamente." }
-      }
-  } else {
-      return { error: "No se pudo generar el enlace de recuperación." }
-  }
+    const resetLink = data.properties.action_link
 
-  return { success: "Enlace de recuperación enviado a tu correo." }
+    const emailResult = await sendPasswordResetEmailAction(email, resetLink)
+
+    if (!emailResult.success) {
+      console.error("❌ Error enviando email con Resend:", emailResult.error)
+      return { error: "Error técnico enviando el correo. Intenta nuevamente." }
+    }
+
+    return { success: "Enlace de recuperación enviado a tu correo." }
+  } else {
+    console.error("❌ Supabase no devolvió action_link")
+    return { error: "No se pudo generar el enlace de recuperación." }
+  }
 }

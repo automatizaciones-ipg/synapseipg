@@ -2,8 +2,9 @@
 'use server'
 
 import { Resend } from 'resend';
+// 👇 TUS IMPORTS ORIGINALES (Respetados)
 import { WelcomeEmail } from '@/components/welcome-template';
-import { ResetPasswordEmail } from '@/app/emails/reset-password-template';
+import { ResetPasswordEmail } from '@/app//emails/reset-password-template';
 
 // Interfaces de retorno estricto
 interface EmailResult {
@@ -63,7 +64,6 @@ export async function sendWelcomeEmailAction(email: string, fullName: string): P
     return { success: true, id: response.data?.id };
 
   } catch (error: unknown) {
-    // AQUI estaba el problema. Usamos el helper getErrorMessage.
     const message = getErrorMessage(error);
     console.error("❌ Error crítico en sendWelcomeEmailAction:", message);
     return { success: false, error: message };
