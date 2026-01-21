@@ -4,7 +4,7 @@
 import { Resend } from 'resend';
 // 👇 TUS IMPORTS ORIGINALES (Respetados)
 import { WelcomeEmail } from '@/components/welcome-template';
-import { ResetPasswordEmail } from '@/app//emails/reset-password-template';
+import { ResetPasswordEmail } from '@/app/emails/reset-password-template';
 
 // Interfaces de retorno estricto
 interface EmailResult {
