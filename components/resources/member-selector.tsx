@@ -21,15 +21,15 @@ export function MemberSelector({ selectedUsers, setSelectedUsers }: MemberSelect
   const [results, setResults] = useState<UserProfile[]>([])
   const [loading, setLoading] = useState(false)
   const [selectedProfiles, setSelectedProfiles] = useState<UserProfile[]>([])
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null) // ID del usuario actual
-  
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+
   const supabase = createClient()
 
   // 0. Obtener ID del usuario actual para excluirlo de la búsqueda
   useEffect(() => {
     const getCurrentUser = async () => {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (user) setCurrentUserId(user.id)
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) setCurrentUserId(user.id)
     }
     getCurrentUser()
   }, [supabase])
@@ -44,28 +44,27 @@ export function MemberSelector({ selectedUsers, setSelectedUsers }: MemberSelect
       }
 
       // IMPORTANTE: Solo hacemos fetch si hay discrepancia entre IDs seleccionados y perfiles cargados
-      // Esto evita parpadeos al borrar
       const currentIds = selectedProfiles.map(p => p.id)
       const needsFetch = selectedUsers.some(id => !currentIds.includes(id))
-      
+
       if (needsFetch) {
-          const { data } = await supabase
-            .from('profiles')
-            .select('id, email, full_name, avatar_url')
-            .in('id', selectedUsers)
-          
-          if (data) setSelectedProfiles(data)
+        const { data } = await supabase
+          .from('profiles')
+          .select('id, email, full_name, avatar_url')
+          .in('id', selectedUsers)
+
+        if (data) setSelectedProfiles(data as UserProfile[])
       } else {
-        // Si no necesitamos fetch (porque borramos), solo filtramos los perfiles locales para que coincidan
+        // Si no necesitamos fetch (porque borramos), solo filtramos los perfiles locales
         setSelectedProfiles(prev => prev.filter(p => selectedUsers.includes(p.id)))
       }
     }
-    
+
     fetchSelectedProfiles()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedUsers]) // Dependencia limpia
+  }, [selectedUsers])
 
-  // 2. Lógica de búsqueda (CORREGIDA: Excluye al usuario actual)
+  // 2. Lógica de búsqueda
   useEffect(() => {
     const searchUsers = async () => {
       if (query.length < 2) {
@@ -79,12 +78,12 @@ export function MemberSelector({ selectedUsers, setSelectedUsers }: MemberSelect
           .select('id, email, full_name, avatar_url')
           .ilike('email', `%${query}%`)
           .limit(5)
-        
-        // ✅ CORRECCIÓN: Excluir al usuario creador
+
+        // Excluir al usuario creador
         if (currentUserId) {
-            dbQuery = dbQuery.neq('id', currentUserId)
+          dbQuery = dbQuery.neq('id', currentUserId)
         }
-        
+
         const { data } = await dbQuery
         if (data) setResults(data as UserProfile[])
       } catch (error) {
@@ -100,10 +99,8 @@ export function MemberSelector({ selectedUsers, setSelectedUsers }: MemberSelect
 
   const toggleUser = (userId: string) => {
     if (selectedUsers.includes(userId)) {
-      // ✅ CORRECCIÓN "X": Actualización optimista inmediata
-      // Eliminamos primero del estado visual para respuesta instantánea
+      // Actualización optimista inmediata
       setSelectedProfiles(prev => prev.filter(p => p.id !== userId))
-      // Luego actualizamos el estado lógico que dispara el useEffect
       setSelectedUsers(selectedUsers.filter(id => id !== userId))
     } else {
       setSelectedUsers([...selectedUsers, userId])
@@ -125,23 +122,23 @@ export function MemberSelector({ selectedUsers, setSelectedUsers }: MemberSelect
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between bg-white text-slate-500 border-slate-200 hover:bg-slate-50 hover:text-slate-700">
-             {selectedUsers.length > 0 ? `${selectedUsers.length} usuarios` : "Buscar por correo..."}
-             <UserPlus className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            {selectedUsers.length > 0 ? `${selectedUsers.length} usuarios` : "Buscar por correo..."}
+            <UserPlus className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[300px] p-0" align="start">
           <div className="p-2 border-b border-slate-100">
             <div className="flex items-center px-2 py-1 bg-slate-50 rounded-md border border-slate-200">
               <Search className="w-4 h-4 text-slate-400 mr-2" />
-              <Input 
-                className="border-0 bg-transparent h-8 p-0 text-sm focus-visible:ring-0 placeholder:text-slate-400" 
-                placeholder="Escribe un correo..." 
+              <Input
+                className="border-0 bg-transparent h-8 p-0 text-sm focus-visible:ring-0 placeholder:text-slate-400"
+                placeholder="Escribe un correo..."
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
             </div>
           </div>
-          <div className="max-h-[200px] overflow-y-auto p-1">
+          <div className="max-h-[200px] overflow-y-auto p-1 custom-scrollbar">
             {loading && <div className="text-xs text-center py-4 text-slate-400">Buscando...</div>}
             {!loading && query.length >= 2 && results.length === 0 && (
               <div className="text-xs text-center py-4 text-slate-400">No se encontraron usuarios</div>
@@ -149,8 +146,8 @@ export function MemberSelector({ selectedUsers, setSelectedUsers }: MemberSelect
             {results.map((user) => {
               const isSelected = selectedUsers.includes(user.id)
               return (
-                <div 
-                  key={user.id} 
+                <div
+                  key={user.id}
                   className={`flex items-center gap-3 p-2 rounded-md cursor-pointer transition-colors ${isSelected ? 'bg-blue-50' : 'hover:bg-slate-50'}`}
                   onClick={() => toggleUser(user.id)}
                 >
@@ -158,7 +155,7 @@ export function MemberSelector({ selectedUsers, setSelectedUsers }: MemberSelect
                     {isSelected && <Check className="w-3 h-3 text-white" />}
                   </div>
                   <Avatar className="h-8 w-8">
-                    <AvatarImage src={user.avatar_url} />
+                    <AvatarImage src={user.avatar_url || undefined} />
                     <AvatarFallback className="text-xs bg-blue-100 text-blue-600">
                       {user.email.substring(0, 2).toUpperCase()}
                     </AvatarFallback>
@@ -174,25 +171,33 @@ export function MemberSelector({ selectedUsers, setSelectedUsers }: MemberSelect
         </PopoverContent>
       </Popover>
 
-      {/* Chips de Usuarios */}
+      {/* Chips de Usuarios - VISUALIZACIÓN */}
       {selectedProfiles.length > 0 && (
         <div className="flex flex-wrap gap-2 pt-1 animate-in fade-in">
           {selectedProfiles.map(user => (
-            <Badge key={user.id} variant="secondary" className="bg-white border border-slate-200 text-slate-600 pl-1 pr-2 py-1 flex items-center gap-2 hover:bg-slate-50 transition-all">
+            <Badge
+              key={user.id}
+              variant="secondary"
+              className="bg-white border border-slate-200 text-slate-600 pl-1 pr-2 py-1 flex items-center gap-2 hover:bg-slate-50 transition-all"
+            >
               <Avatar className="h-5 w-5">
-                <AvatarImage src={user.avatar_url} />
-                <AvatarFallback className="text-[9px]">{user.email.substring(0,1)}</AvatarFallback>
+                <AvatarImage src={user.avatar_url || undefined} />
+                <AvatarFallback className="text-[9px]">{user.email.substring(0, 1).toUpperCase()}</AvatarFallback>
               </Avatar>
-              <span className="max-w-[100px] truncate">{user.full_name?.split(' ')[0] || user.email.split('@')[0]}</span>
-              <div 
+
+              <span className="max-w-[180px] truncate font-normal text-xs font-mono text-slate-600">
+                {user.email}
+              </span>
+
+              <div
                 role="button"
-                className="hover:bg-red-100 rounded-full p-0.5 transition-colors"
+                className="hover:bg-red-100 rounded-full p-0.5 transition-colors cursor-pointer ml-1"
                 onClick={(e) => {
-                    e.stopPropagation(); // Evita burbujeo de eventos
-                    toggleUser(user.id);
+                  e.stopPropagation();
+                  toggleUser(user.id);
                 }}
               >
-                 <X className="w-3 h-3 text-slate-400 hover:text-red-500" />
+                <X className="w-3 h-3 text-slate-400 hover:text-red-500" />
               </div>
             </Badge>
           ))}

@@ -2,8 +2,8 @@
 
 import { Resend } from 'resend';
 import { WelcomeEmail } from '@/components/welcome-template';
-// 👇 CAMBIO 1: Ruta corregida y apuntando a components (Recomendado mover la carpeta ahí)
 import { ResetPasswordEmail } from '@/app/emails/reset-password-template';
+import { ResourceSharedEmail } from '@/app/emails/resource-shared-email'
 
 // Interfaces de retorno estricto
 interface EmailResult {
@@ -11,6 +11,8 @@ interface EmailResult {
   id?: string;
   error?: string;
 }
+
+
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const fromEmail = process.env.RESEND_FROM_EMAIL;
@@ -119,6 +121,48 @@ export async function sendPasswordResetEmailAction(email: string, resetLink: str
     if (error instanceof Error && error.stack) console.error("Stack:", error.stack);
     console.error("------------------------------------------------");
 
+    return { success: false, error: message };
+  }
+}
+
+
+/**
+ * 3 ACCIÓN: Notificar Recurso Compartido
+ */
+
+export async function sendResourceSharedEmailAction(
+  email: string,
+  recipientName: string,
+  senderName: string,
+  resourceTitle: string,
+  resourceId: string
+): Promise<EmailResult> {
+
+  if (!validateConfig()) return { success: false, error: "Server config error" };
+
+  try {
+    const response = await resend.emails.send({
+      from: fromEmail!,
+      to: [email],
+      subject: `📄 ${senderName} compartió un recurso contigo - Synapse IPG`,
+      react: ResourceSharedEmail({
+        recipientName,
+        senderName,
+        resourceTitle,
+        resourceId
+      }) as React.ReactElement,
+    });
+
+    if (response.error) {
+      console.error(`⚠️ Resend Error (Share to ${email}):`, response.error);
+      return { success: false, error: response.error.message };
+    }
+
+    return { success: true, id: response.data?.id };
+
+  } catch (error: unknown) {
+    const message = getErrorMessage(error);
+    console.error("❌ Error crítico en sendResourceSharedEmailAction:", message);
     return { success: false, error: message };
   }
 }
