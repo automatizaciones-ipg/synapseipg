@@ -1,4 +1,3 @@
-// ARCHIVO: app/login/actions.ts
 'use server'
 
 import { revalidatePath } from 'next/cache'
@@ -62,7 +61,7 @@ export async function signup(formData: FormData): Promise<AuthResponse | void> {
   const email = data.email as string
   const fullName = data.full_name as string
 
-  // 1. Crear usuario en Supabase
+  // 1. Crear usuario en Supabase Auth
   const { error, data: authData } = await supabase.auth.signUp({
     email: email,
     password: data.password as string,
@@ -73,9 +72,20 @@ export async function signup(formData: FormData): Promise<AuthResponse | void> {
 
   if (error) return { error: error.message }
 
-  // 2. Si se creó el usuario, enviar correo de Bienvenida
+  // 2. Post-Procesamiento de Creación
   if (authData.user) {
-    // Llamada asíncrona segura.
+    // 👇 CAMBIO APLICADO: Forzar explícitamente el tema LIGHT en el perfil recién creado.
+    // Aunque la BD tenga un default, esto garantiza consistencia absoluta desde el código.
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .update({ theme: 'light' })
+      .eq('id', authData.user.id)
+
+    if (profileError) {
+      console.error("⚠️ Error forzando tema claro inicial:", profileError.message)
+    }
+
+    // 3. Enviar correo de Bienvenida (Llamada asíncrona segura)
     const emailResult = await sendWelcomeEmailAction(email, fullName)
 
     if (!emailResult.success) {
@@ -103,7 +113,6 @@ export async function resetPassword(formData: FormData): Promise<AuthResponse> {
   const email = emailRaw.trim(); // Trim para evitar espacios accidentales
 
   // Validar variables de entorno críticas para Admin Client
-  // NECESITAS ESTA VARIABLE EN TU .ENV.LOCAL PARA QUE FUNCIONE EL "GENERATE LINK"
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -112,7 +121,7 @@ export async function resetPassword(formData: FormData): Promise<AuthResponse> {
     return { error: "Error de configuración del servidor." };
   }
 
-  // 1. Instanciar Supabase ADMIN (Permisos elevados para generar links)
+  // 1. Instanciar Supabase ADMIN
   const supabaseAdmin = createSupabaseAdmin(
     supabaseUrl,
     serviceRoleKey,
@@ -120,11 +129,7 @@ export async function resetPassword(formData: FormData): Promise<AuthResponse> {
   )
 
   // 2. Construcción ROBUSTA de la URL de redirección
-  // Usamos NEXT_PUBLIC_SITE_URL para saber si estamos en local o prod
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
-
-  // ⚡️ CAMBIO QUIRÚRGICO: Apuntamos a la nueva página de verificación (/auth/verify)
-  // Esta página procesará el HASH (#access_token=...) en el cliente.
   const redirectTo = `${siteUrl}/auth/verify`
 
   console.log(`🔹 Generando link de recuperación para: ${email}`);
@@ -141,7 +146,6 @@ export async function resetPassword(formData: FormData): Promise<AuthResponse> {
 
   if (error) {
     console.error("❌ Error generating recovery link:", error.message)
-    // Mensaje genérico al usuario por seguridad, log detallado en consola
     return { error: "No se pudo procesar la solicitud. Verifica el correo." }
   }
 

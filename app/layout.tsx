@@ -19,15 +19,15 @@ export default function RootLayout({
   return (
     <html lang="es" suppressHydrationWarning>
       <body className={`${inter.className} antialiased`}>
-        {/* 👇 Envolvemos TODA la aplicación en el Proveedor */}
+
         <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
+          attribute="class"
+          defaultTheme="light"
+          enableSystem={false}
+          disableTransitionOnChange
         >
-            {children}
-            <Toaster />
+          {children}
+          <Toaster />
         </ThemeProvider>
       </body>
     </html>
