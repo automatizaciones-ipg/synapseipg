@@ -33,10 +33,10 @@ export default function LessonThreePage() {
             <div className="space-y-6 border-b border-slate-200 pb-10">
                 <div className="flex items-center gap-2 text-sm text-slate-500">
                     <Link href="/docs/tutorial/profile" className="hover:text-blue-600 transition-colors">
-                        Módulo 2
+                        3. Tu Espacio Personal
                     </Link>
                     <ArrowRight className="h-3 w-3" />
-                    <span className="font-medium text-blue-600">Módulo 3</span>
+                    <span className="font-medium text-blue-600">4. Navegación Maestra</span>
                 </div>
 
                 <div className="flex items-center gap-3">
@@ -231,7 +231,7 @@ export default function LessonThreePage() {
                     <Button variant="outline" asChild className="group">
                         <Link href="/docs/tutorial/profile">
                             <ArrowLeft className="mr-2 h-4 w-4 transition-transform group-hover:-translate-x-1" />
-                            2. Tu Espacio Personal
+                            3. Tu Espacio Personal
                         </Link>
                     </Button>
                 </div>
@@ -241,7 +241,7 @@ export default function LessonThreePage() {
                     <Button asChild size="lg" className="group bg-slate-900 hover:bg-slate-800 text-white px-8">
                         {/* Asumimos que la siguiente lección será sobre Recursos */}
                         <Link href="/docs/tutorial/resources">
-                            4. Gestión de Recursos
+                            5. Gestión de Recursos
                             <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
                         </Link>
                     </Button>
