@@ -501,3 +501,57 @@ async function notifyNewShares(
     console.error("❌ Error en notifyNewShares:", e instanceof Error ? e.message : e);
   }
 }
+
+
+// -----------------------------------------------------------------------------
+// 8. DASHBOARD HERO: FEED PÚBLICO (OPTIMIZED & STRICT)
+// -----------------------------------------------------------------------------
+
+// Definición estricta de la estructura de la respuesta DB (Join profiles)
+// Esto asegura que el frontend sepa exactamente si profiles es array, objeto o null.
+export interface DashboardPublicResource {
+  id: string
+  title: string
+  file_type: string // Coherente con tu saveResource
+  created_at: string
+  // Mapeo preciso de la relación: created_by -> profiles
+  profiles: { 
+    full_name: string | null 
+  } | null 
+}
+
+/**
+ * Obtiene los recursos públicos más recientes para el Hero del Dashboard.
+ * Aplica filtros de seguridad (no eliminados) y optimización de selección.
+ */
+export async function getPublicFeedForDashboard(limit = 5): Promise<DashboardPublicResource[]> {
+  const supabase = await createClient()
+
+  try {
+    // No necesitamos verificar auth estricta para leer datos públicos, 
+    // pero mantenemos la consistencia del cliente.
+    
+    const { data, error } = await supabase
+      .from('resources')
+      .select('id, title, file_type, created_at, profiles:created_by(full_name)')
+      .eq('is_public', true)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .limit(limit)
+      // 🔥 CRÍTICO: Esto fuerza a TypeScript a tratar la respuesta como nuestra interfaz
+      // y valida que la query construida coincida con la estructura esperada.
+      .returns<DashboardPublicResource[]>() 
+
+    if (error) {
+      console.error("❌ Error fetching public feed:", error.message)
+      // En arquitectura resiliente, fallar el feed no debe romper la app, devolvemos array vacío.
+      return []
+    }
+
+    return data || []
+
+  } catch (error) {
+    console.error("❌ Excepción crítica en getPublicFeedForDashboard:", error)
+    return []
+  }
+}

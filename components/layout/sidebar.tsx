@@ -17,7 +17,8 @@ import {
   Zap,
   Heart,
   Briefcase,
-  Trash2
+  Trash2,
+  BookOpen
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
@@ -214,6 +215,7 @@ const sidebarItems = [
   { icon: Users, label: 'Compartidos', href: '/shared' },
   { icon: Briefcase, label: 'Grupos de Trabajo', href: '/groups' },
   { icon: Settings, label: 'Configuración', href: '/settings' },
+  { icon: BookOpen, label: 'Documentación', href: '/docs' },
 ]
 
 export function Sidebar() {

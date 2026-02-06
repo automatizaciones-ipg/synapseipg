@@ -4,11 +4,16 @@ import { redirect } from "next/navigation"
 // Componentes UI
 import { ResourceBrowser, FolderType } from "@/components/dashboard/resource-browser"
 import { ResourceWithRelations } from "@/components/dashboard/resource-card"
-// IMPORTACIÓN NUEVA: El componente visual que acabamos de crear
-import { DashboardHero } from "@/app/(dashboard)/dashboard-hero" 
+import { DashboardHero, GlobalResource } from "@/app/(dashboard)/dashboard-hero" 
 
-// Tipos
+// Tipos Globales
 import { Resource } from "@/types"
+
+// Actions (Arquitectura Limpia)
+import { 
+    getPublicFeedForDashboard,  // <--- NUEVO IMPORT
+    DashboardPublicResource     // <--- NUEVO TIPO
+} from "@/actions/resources"
 
 // Lógica Centralizada
 import { 
@@ -22,15 +27,47 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 // =====================================================================
-// 🛠️ FIX QUIRÚRGICO DE TIPOS (INTACTO)
-// Definimos un tipo local que extiende el original agregando deleted_at
+// 1. DEFINICIONES DE TIPO ESTRICTAS (ZERO ANY)
 // =====================================================================
-type ExtendedResource = DBResourceRaw & { deleted_at?: string | null }
 
-// Helper Type Guard para filas compartidas que también pueden tener deleted_at
-type ExtendedShareRow = Omit<DBShareRow, 'resources'> & { 
-    resources: ExtendedResource | null 
+// (Nota: Eliminamos interfaces manuales de PublicFeedRow porque ahora las importamos del action)
+
+type ExtendedResource = DBResourceRaw & { deleted_at?: string | null }
+type ExtendedShareRow = Omit<DBShareRow, 'resources'> & { resources: ExtendedResource | null }
+
+// =====================================================================
+// 2. TYPE GUARDS & HELPERS
+// =====================================================================
+
+function isShareRow(item: unknown): item is ExtendedShareRow {
+    return (typeof item === 'object' && item !== null && 'resources' in item);
 }
+
+function isResourceRow(item: unknown): item is ExtendedResource {
+    return (typeof item === 'object' && item !== null && 'id' in item && !('resources' in item));
+}
+
+// Ajustado para leer file_type
+const getVisualType = (fileType: string | null): GlobalResource['type'] => {
+    const t = (fileType || '').toLowerCase();
+    if (t === 'link') return 'OTHER'; // O 'LINK' si tienes icono específico
+    if (t.includes('pdf')) return 'PDF';
+    if (t.includes('image') || t.includes('png') || t.includes('jpg')) return 'IMG';
+    if (t.includes('doc') || t.includes('word') || t.includes('sheet')) return 'DOC';
+    return 'OTHER';
+};
+
+const getTimeAgo = (dateStr: string): string => {
+    const diff = (new Date().getTime() - new Date(dateStr).getTime()) / 1000;
+    if (diff < 60) return 'hace instantes';
+    if (diff < 3600) return `hace ${Math.floor(diff / 60)} min`;
+    if (diff < 86400) return `hace ${Math.floor(diff / 3600)} h`;
+    return `hace ${Math.floor(diff / 86400)} d`;
+};
+
+// =====================================================================
+// 3. PAGE COMPONENT
+// =====================================================================
 
 export default async function DashboardPage() {
     const supabase = await createClient()
@@ -38,109 +75,120 @@ export default async function DashboardPage() {
     
     if (!user) redirect('/login')
 
-    // 1. Grupos (LOGICA INTACTA)
-    const { data: myGroups } = await supabase.from('group_members').select('group_id').eq('user_id', user.id);
+    // --- A. Obtener Grupos ---
+    const { data: myGroups } = await supabase
+        .from('group_members')
+        .select('group_id')
+        .eq('user_id', user.id);
+        
     const groupIds = myGroups?.map((g) => g.group_id) || [];
 
-    console.log(`⚡ [SERVER] Cargando Dashboard para: ${user.email}`);
-
-    // 2. Fetching Paralelo (LOGICA INTACTA)
-    const [profileRes, ownedRes, directShareRes, groupShareRes, foldersRes, favsRes] = await Promise.all([
+    // --- B. Ejecución Paralela de Consultas ---
+    const [
+        profileRes, 
+        ownedRes, 
+        directShareRes, 
+        groupShareRes, 
+        foldersRes, 
+        favsRes, 
+        publicFeedData // <--- Variable limpia, viene directa del Action
+    ] = await Promise.all([
+        // 1. Rol
         supabase.from('profiles').select('role').eq('id', user.id).single(),
         
-        // Mis Archivos (Filtrando eliminados)
+        // 2. Mis Archivos
         supabase.from('resources')
             .select(RESOURCE_DEEP_SELECT)
             .is('deleted_at', null) 
             .or(`created_by.eq.${user.id},is_public.eq.true`)
-            .order('created_at', { ascending: false }),
+            .order('created_at', { ascending: false })
+            .returns<ExtendedResource[]>(),
 
-        // Compartidos Directos (Filtrando eliminados)
+        // 3. Compartidos Directos
         supabase.from('resource_shares')
             .select(`created_at, resources (${RESOURCE_DEEP_SELECT})`)
             .eq('user_id', user.id)
-            .is('resources.deleted_at', null),
+            .is('resources.deleted_at', null)
+            .returns<ExtendedShareRow[]>(),
 
-        // Compartidos por Grupo (Filtrando eliminados)
+        // 4. Compartidos por Grupo
         groupIds.length > 0 
             ? supabase.from('resource_group_shares')
                 .select(`created_at, resources (${RESOURCE_DEEP_SELECT})`)
                 .in('group_id', groupIds)
                 .is('resources.deleted_at', null)
-            : Promise.resolve({ data: [], error: null }),
+                .returns<ExtendedShareRow[]>()
+            : Promise.resolve({ data: [] as ExtendedShareRow[], error: null }),
 
-        // Carpetas
-        supabase.from('folders').select('*').order('name'),
+        // 5. Carpetas
+        supabase.from('folders').select('*').order('name').returns<FolderType[]>(),
         
-        // Favoritos
-        supabase.from('favorites').select('resource_id').eq('user_id', user.id)
+        // 6. Favoritos
+        supabase.from('favorites').select('resource_id').eq('user_id', user.id),
+
+        // 7. 🔥 Feed Público: Usamos tu nueva arquitectura segura 🔥
+        getPublicFeedForDashboard(5)
     ]);
 
-    const userRole = (profileRes.data?.role as 'admin' | 'auditor') || 'auditor'
+    const userRole = (profileRes.data?.role as 'admin' | 'auditor') || 'auditor';
 
-    // --- PROCESAMIENTO DE RECURSOS (LOGICA INTACTA) ---
+    // --- C. Unificación de Recursos (Tu lógica original intacta) ---
     const resourceMap = new Map<string, ResourceWithRelations>();
 
-    // Usamos 'unknown' como paso intermedio para aplicar nuestro tipo corregido 'ExtendedResource'
-    const safeInsert = (list: unknown[] | null, isShared: boolean) => {
+    const processResourceList = (list: (ExtendedResource | ExtendedShareRow)[] | null, isShared: boolean) => {
         if (!list) return;
-
-        list.forEach((item) => {
-            if (!item) return;
-            
+        for (const item of list) {
             let rawResource: ExtendedResource | null = null;
+            if (isShareRow(item)) rawResource = item.resources;
+            else if (isResourceRow(item)) rawResource = item;
 
-            // Lógica de extracción segura tipada
-            if (typeof item === 'object' && item !== null && 'resources' in item) {
-                rawResource = (item as ExtendedShareRow).resources;
-            } else {
-                rawResource = item as ExtendedResource;
-            }
-
-            // Validaciones
-            if (!rawResource || !rawResource.id) return;
-            
-            // TypeScript sabe que 'deleted_at' es una propiedad válida opcional
-            if (rawResource.deleted_at) return;
-
-            if (resourceMap.has(rawResource.id)) return;
+            if (!rawResource || !rawResource.id) continue;
+            if (rawResource.deleted_at) continue;
+            if (resourceMap.has(rawResource.id)) continue;
             
             const appRes = transformToAppResource(rawResource, user.id, isShared);
             resourceMap.set(appRes.id, appRes);
-        });
+        }
     };
 
-    safeInsert(ownedRes.data as unknown[], false);
-    safeInsert(directShareRes.data as unknown[], true);
-    safeInsert(groupShareRes.data as unknown[], true);
+    processResourceList(ownedRes.data, false);
+    processResourceList(directShareRes.data, true);
+    
+    // SOLUCIÓN FINAL: Casting explícito. 
+    // Le decimos a TS: "Tranquilo, esto es una lista de filas compartidas o null".
+    // Esto funciona tanto para la respuesta de Supabase como para nuestro objeto fallback vacío.
+    processResourceList((groupShareRes.data as ExtendedShareRow[] | null), true);
 
+    // --- D. Favoritos ---
     const favSet = new Set((favsRes.data || []).map((f) => f.resource_id));
     
-    const finalResources = Array.from(resourceMap.values()).map((r) => ({
+    const finalResources: Resource[] = Array.from(resourceMap.values()).map((r) => ({
         ...r,
         is_favorite: favSet.has(r.id)
-    })).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    })).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()) as unknown as Resource[]; 
 
-    // --- FILTRADO DE CARPETAS (LOGICA INTACTA) ---
-    const rawFolders = (foldersRes.data || []) as FolderType[];
-    
-    // 🔥 CORRECCIÓN CRÍTICA DE VISIBILIDAD MANTENIDA 🔥
-    const validFolders = rawFolders.filter((f) => {
-        // 1. Filtramos SIEMPRE las carpetas de sistema (vistas técnicas)
-        if (['shared_view', 'favorites_view'].includes(f.category || '')) return false;
-
-        // 2. MODO WIKI: 
-        return true;
+    // --- E. Filtrado de Carpetas ---
+    const validFolders = (foldersRes.data || []).filter((f) => {
+        return !['shared_view', 'favorites_view'].includes(f.category || '');
     });
 
-    // =================================================================
-    // ÚNICO CAMBIO: LA VISUALIZACIÓN
-    // Envolvemos el resultado en DashboardHero para la animación de entrada
-    // =================================================================
+    // --- F. Preparación Datos Hero (Ahora 100% Typado y Seguro) ---
+    // publicFeedData es DashboardPublicResource[] garantizado
+    const heroResources: GlobalResource[] = publicFeedData.map((r) => ({
+        id: r.id,
+        title: r.title,
+        type: getVisualType(r.file_type), // <--- Usamos file_type de la DB
+        author: r.profiles?.full_name || 'Sistema',
+        timeAgo: getTimeAgo(r.created_at)
+    }));
+
     return (
-        <DashboardHero userEmail={user.email}>
+        <DashboardHero 
+            userEmail={user.email}
+            recentResources={heroResources}
+        >
             <ResourceBrowser 
-                initialResources={finalResources as unknown as Resource[]} 
+                initialResources={finalResources} 
                 initialFolders={validFolders} 
                 userEmail={user.email} 
                 userRole={userRole} 

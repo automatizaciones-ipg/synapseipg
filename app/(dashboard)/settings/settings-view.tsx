@@ -242,7 +242,7 @@ export function SettingsView({ user, profile, storageUsed }: SettingsViewProps) 
                <CardContent className="space-y-4">
                   <div className="space-y-2">
                      <Label>Nombre Completo</Label>
-                     <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
+                     <Input value={fullName} disabled />
                   </div>
                   <div className="space-y-2">
                      <Label>Biografía</Label>
