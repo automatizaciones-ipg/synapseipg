@@ -22,8 +22,6 @@ import { GroupSelector } from './group-selector'
 import {
   Loader2,
   Type,
-  Tag,
-  Save,
   X,
   Link2,
   FileBox,
@@ -32,12 +30,14 @@ import {
   Globe,
   Users,
   Briefcase,
-  ShieldCheck
+  ShieldCheck,
+  Save
 } from "lucide-react"
 
 // --- TIPOS ESTRICTOS ---
 type VisibilityTab = "public" | "users" | "groups"
 
+// ✅ CORRECCIÓN 1: Definir last_version como OBLIGATORIO (number), no opcional (?)
 interface ResourceUpdatePayload {
   title: string
   description: string
@@ -47,6 +47,7 @@ interface ResourceUpdatePayload {
   is_public: boolean
   shared_with: string[]
   shared_groups: string[]
+  last_version: number // ¡Sin el signo de interrogación!
 }
 
 interface EditResourceDialogProps {
@@ -58,10 +59,8 @@ interface EditResourceDialogProps {
     description?: string
     category?: string
     tags?: string[]
-    // Propiedades de la BD
     file_type?: string
     file_url?: string
-    // Propiedades mapeadas
     type?: string
     url_or_path?: string
   }
@@ -95,13 +94,16 @@ export function EditResourceDialog({ isOpen, onClose, resource }: EditResourceDi
     link: ''
   })
 
-  // --- ESTADOS DE PERMISOS ---
+  // --- ESTADOS DE PERMISOS E INTEGRIDAD ---
   const [activeTab, setActiveTab] = useState<VisibilityTab>("public")
   const [selectedUsers, setSelectedUsers] = useState<string[]>([])
   const [selectedGroups, setSelectedGroups] = useState<string[]>([])
   const [isLoadingPermissions, setIsLoadingPermissions] = useState(false)
+  
+  // Estado para guardar la versión. Puede ser undefined al principio.
+  const [lastVersion, setLastVersion] = useState<number | undefined>(undefined)
 
-  // 1. CARGA INICIAL DE DATOS DEL FORMULARIO
+  // 1. CARGA INICIAL
   useEffect(() => {
     if (isOpen) {
       setFormData({
@@ -115,7 +117,7 @@ export function EditResourceDialog({ isOpen, onClose, resource }: EditResourceDi
     }
   }, [isOpen, resource, isLinkResource, currentUrl])
 
-  // 2. HIDRATACIÓN INTELIGENTE (Determina la pestaña activa)
+  // 2. HIDRATACIÓN INTELIGENTE
   useEffect(() => {
     if (!isOpen || !resource.id) return;
 
@@ -124,23 +126,24 @@ export function EditResourceDialog({ isOpen, onClose, resource }: EditResourceDi
     const hydratePermissions = async () => {
       setIsLoadingPermissions(true);
       try {
-        // Consultamos TODO: Permisos y si es Público
         const [usersResponse, groupsResponse, resourceMeta] = await Promise.all([
           supabase.from('resource_shares').select('user_id').eq('resource_id', resource.id),
           supabase.from('resource_group_shares').select('group_id').eq('resource_id', resource.id),
-          supabase.from('resources').select('is_public').eq('id', resource.id).single()
+          supabase.from('resources').select('is_public, version').eq('id', resource.id).single()
         ]);
 
         if (!isMounted) return;
 
         const userIds = usersResponse.data?.map((row: { user_id: string }) => row.user_id) || [];
         const groupIds = groupsResponse.data?.map((row: { group_id: string }) => row.group_id) || [];
+        
         const isPublic = resourceMeta.data?.is_public ?? true;
+        const currentVersion = resourceMeta.data?.version; 
 
         setSelectedUsers(userIds);
         setSelectedGroups(groupIds);
+        setLastVersion(currentVersion);
 
-        // LOGICA DE PESTAÑA INICIAL (Exclusión Mutua)
         if (isPublic) {
           setActiveTab("public");
         } else if (userIds.length > 0) {
@@ -148,7 +151,7 @@ export function EditResourceDialog({ isOpen, onClose, resource }: EditResourceDi
         } else if (groupIds.length > 0) {
           setActiveTab("groups");
         } else {
-          setActiveTab("users");
+          setActiveTab("users"); 
         }
 
       } catch (error) {
@@ -165,6 +168,7 @@ export function EditResourceDialog({ isOpen, onClose, resource }: EditResourceDi
       isMounted = false;
       setSelectedUsers([]);
       setSelectedGroups([]);
+      setLastVersion(undefined);
       setIsLoadingPermissions(false);
       setActiveTab("public");
     };
@@ -194,7 +198,6 @@ export function EditResourceDialog({ isOpen, onClose, resource }: EditResourceDi
       return
     }
 
-    // VALIDACIÓN DE EXCLUSIVIDAD
     if (activeTab === 'users' && selectedUsers.length === 0) {
       toast.error("Selecciona al menos un usuario o cambia a modo Público/Grupos")
       return
@@ -212,17 +215,19 @@ export function EditResourceDialog({ isOpen, onClose, resource }: EditResourceDi
         finalTags.push(pendingTag);
       }
 
-      // CONSTRUCCIÓN DEL PAYLOAD (Typescript Estricto)
+      // ✅ CORRECCIÓN 2: Uso de Fallback (?? 0) para asegurar que siempre sea un número
+      // Si lastVersion es undefined (aún cargando o dato viejo), enviamos 0.
+      // El backend manejará el 0 correctamente.
       const payload: ResourceUpdatePayload = {
         title: formData.title,
         description: formData.description,
         category: formData.category,
         tags: finalTags,
         link: isLinkResource ? formData.link : undefined,
-        // Lógica de exclusividad estricta
         is_public: activeTab === 'public',
         shared_with: activeTab === 'users' ? selectedUsers : [],
-        shared_groups: activeTab === 'groups' ? selectedGroups : []
+        shared_groups: activeTab === 'groups' ? selectedGroups : [],
+        last_version: lastVersion ?? 0 // <--- ESTA ES LA CLAVE PARA QUE COMPILE
       }
 
       const response = await updateResource(resource.id, payload)
@@ -234,6 +239,7 @@ export function EditResourceDialog({ isOpen, onClose, resource }: EditResourceDi
         toast.error(response.message)
       }
     } catch (error) {
+      console.error(error)
       toast.error("Error al guardar cambios")
     } finally {
       setLoading(false)
@@ -266,7 +272,7 @@ export function EditResourceDialog({ isOpen, onClose, resource }: EditResourceDi
         <div className="flex-1 overflow-y-auto custom-scrollbar">
           <div className="px-7 py-6 space-y-6">
 
-            {/* 0. CAMPO DE FUENTE (RESTAURADO) */}
+            {/* 0. CAMPO DE FUENTE */}
             <div className="space-y-2">
               <Label className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
                 {isLinkResource ? (
