@@ -35,7 +35,7 @@ export const WelcomeEmail = ({
         <Text className="m-0 mb-2 text-[14px] text-slate-700">🤝 <strong>Colaboración:</strong> Comparte archivos de forma segura con usuarios de ipg.</Text>
         <Text className="m-0 text-[14px] text-slate-700">⚡ <strong>Acceso:</strong> Descarga lo que necesites desde cualquier dispositivo y lugar.</Text>
         <br/>
-        <Text className="m-0 text-[14px] text-slate-700">⚡ <strong>Cuenta:</strong> Tu contraseña actual es: ABCabc123 y te recomendamos cambiarla desde el login de la plataforma.</Text>
+        <Text className="m-0 text-[14px] text-slate-700">🔐 <strong>Tu contraseña actual es: ABCabc123</strong> y te recomendamos cambiarla desde el <strong>login de la plataforma.</strong></Text>
       </Section>
 
       {/* BOTÓN CTA */}
