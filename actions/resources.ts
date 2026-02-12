@@ -22,6 +22,7 @@ export interface UpdateResourcePayload {
   is_public: boolean
   shared_with: string[]
   shared_groups: string[]
+  last_version: number
 }
 
 // Tipo interno estricto para la DB
@@ -48,13 +49,35 @@ interface GroupMemberJoin {
 }
 
 // -----------------------------------------------------------------------------
-// 1. GUARDAR RECURSO (CREATE)
+// 1. GUARDAR RECURSO (CREATE) - BLINDADO CON INTEGRIDAD TRANSACCIONAL
 // -----------------------------------------------------------------------------
 export async function saveResource(data: ResourceData): Promise<ActionResponse> {
   const supabase = await createClient()
 
+  // 1. Auth Check
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, message: "No autorizado." }
+
+  // 2. RBAC: Rol de Usuario
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single()
+
+  const userRole = profile?.role || 'auditor'
+  const isSuperUser = ['admin', 'global_admin'].includes(userRole)
+
+  // 3. Regla de Negocio: Bloqueo de subida física para no-admins
+  if ((data.file_path || (data.file_type && data.file_type !== 'link')) && !isSuperUser) {
+    // Si intentó subir algo y no tiene permiso, intentamos borrar el archivo huérfano del storage por seguridad
+    if (data.file_path) await supabase.storage.from('resources').remove([data.file_path])
+    
+    return { 
+      success: false, 
+      message: "⛔ Permiso denegado: Tu rol solo permite compartir enlaces, no subir archivos." 
+    }
+  }
 
   let targetFolderId = data.folder_id || data.folderId;
   if (targetFolderId === 'null' || targetFolderId === '') targetFolderId = null;
@@ -63,10 +86,11 @@ export async function saveResource(data: ResourceData): Promise<ActionResponse> 
     (data.shared_groups && data.shared_groups.length > 0);
 
   const isPublic = data.is_public !== undefined ? data.is_public : !hasShares;
+  let createdResourceId: string | null = null;
 
   try {
     // A. Insertar Metadatos
-    const { data: newResource, error } = await supabase
+    const { data: newResource, error: insertError } = await supabase
       .from('resources')
       .insert({
         title: data.title,
@@ -79,25 +103,32 @@ export async function saveResource(data: ResourceData): Promise<ActionResponse> 
         file_size: data.file_size || 0,
         dominant_color: data.color,
         created_by: user.id,
-        version: 1,
+        version: 1, 
         is_public: isPublic,
         folder_id: targetFolderId
       })
       .select('id')
       .single()
 
-    if (error) throw new Error(error.message)
+    if (insertError) {
+        // ROLLBACK STORAGE: Si falla la BD, borramos el archivo físico subido
+        if (data.file_path) {
+            console.warn(`🔄 Rollback Storage: Eliminando ${data.file_path}`);
+            await supabase.storage.from('resources').remove([data.file_path]);
+        }
+        throw new Error(insertError.message);
+    }
 
-    // B. Gestión de Permisos (Insert Inicial)
+    createdResourceId = newResource.id;
+
+    // B. Gestión de Permisos (Si no es público)
     if (!isPublic) {
-      const resourceId = newResource.id;
-
       const shareOperations: PromiseLike<unknown>[] = [];
 
       // 1. Usuarios
       if (data.shared_with && data.shared_with.length > 0) {
         const userShares = data.shared_with.map((uid: string) => ({
-          resource_id: resourceId,
+          resource_id: createdResourceId,
           user_id: uid,
           resource_created_by: user.id
         }));
@@ -107,7 +138,7 @@ export async function saveResource(data: ResourceData): Promise<ActionResponse> 
       // 2. Grupos
       if (data.shared_groups && data.shared_groups.length > 0) {
         const groupShares = data.shared_groups.map((gid: string) => ({
-          resource_id: resourceId,
+          resource_id: createdResourceId,
           group_id: gid,
           resource_created_by: user.id
         }));
@@ -116,12 +147,17 @@ export async function saveResource(data: ResourceData): Promise<ActionResponse> 
 
       // Ejecutar inserciones
       if (shareOperations.length > 0) {
-        await Promise.all(shareOperations);
+        const results = await Promise.allSettled(shareOperations);
+        
+        // ROLLBACK DB: Si fallan los permisos, borramos el recurso para no dejarlo "invisible" e inaccesible
+        const failed = results.some(r => r.status === 'rejected');
+        if (failed) {
+             throw new Error("Error al asignar permisos. Operación revertida.");
+        }
 
-        // C. NOTIFICACIÓN POR CORREO
-        // No pasamos el cliente, la función instancia uno nuevo o recibe solo IDs
+        // C. NOTIFICACIÓN (Solo si todo es éxito)
         await notifyNewShares(
-          resourceId,
+          createdResourceId!,
           data.title,
           user.id,
           data.shared_with || [],
@@ -134,8 +170,28 @@ export async function saveResource(data: ResourceData): Promise<ActionResponse> 
     return { success: true, id: newResource.id, message: "Recurso publicado correctamente." }
 
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : "Error desconocido al guardar";
-    console.error("❌ Error Save Resource:", errorMessage)
+    let errorMessage = "Error desconocido al guardar";
+
+    if (error instanceof Error) {
+        errorMessage = error.message;
+        // Limpieza de mensajes técnicos de Postgres
+        if (errorMessage.includes("⛔")) {
+            const parts = errorMessage.split("⛔");
+            if (parts.length > 1) errorMessage = "⛔ " + parts[1].trim();
+        }
+    }
+
+    console.error("❌ Error Save Resource:", errorMessage);
+
+    // ROLLBACK FINAL DE EMERGENCIA: Si se creó el ID pero falló algo crítico después
+    if (createdResourceId) {
+        await supabase.from('resources').delete().eq('id', createdResourceId);
+    }
+    // ROLLBACK FINAL STORAGE: Asegurar limpieza si existe path y falló la transacción
+    if (data.file_path && !createdResourceId) {
+         await supabase.storage.from('resources').remove([data.file_path]);
+    }
+
     return { success: false, message: errorMessage }
   }
 }
@@ -176,12 +232,10 @@ export async function getFilesForView(
   return data as LibraryResource[];
 }
 
-// -----------------------------------------------------------------------------
-// 3. EDITAR RECURSO (UPDATE)
-// -----------------------------------------------------------------------------
 export async function updateResource(resourceId: string, payload: UpdateResourcePayload): Promise<ActionResponse> {
   const supabase = await createClient()
 
+  // 1. Auth Check
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, message: "No autorizado." }
 
@@ -190,70 +244,119 @@ export async function updateResource(resourceId: string, payload: UpdateResource
   }
 
   try {
-    // Construcción Tipada del Objeto Update
-    const updates: ResourceUpdateDB = {
+    // 2. DIAGNÓSTICO PREVIO (Lectura Crítica)
+    const { data: currentResource, error: fetchError } = await supabase
+      .from('resources')
+      .select('created_by, version')
+      .eq('id', resourceId)
+      .single()
+
+    if (fetchError || !currentResource) {
+      return { success: false, message: "El recurso no existe o no tienes acceso." }
+    }
+
+    // 3. SEGURIDAD RBAC (Dueño o Admin)
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    const userRole = profile?.role || 'auditor'
+    const isSuperUser = ['admin', 'global_admin'].includes(userRole)
+    const isOwner = currentResource.created_by === user.id
+
+    if (!isOwner && !isSuperUser) {
+      return { success: false, message: "⛔ Solo el propietario o un administrador pueden editar este recurso." }
+    }
+
+    // 4. CONTROL DE CONCURRENCIA INTELIGENTE (Solución al Falso Positivo)
+    // Tratamos null como 0 para recursos antiguos
+    const currentDbVersion = currentResource.version ?? 0;
+    
+    // Si el payload trae versión, validamos estrictamente. 
+    // Si NO trae (undefined), asumimos que es la actual para DESBLOQUEARTE ahora mismo.
+    const clientVersion = payload.last_version !== undefined ? payload.last_version : currentDbVersion;
+
+    if (currentDbVersion !== clientVersion) {
+      return { 
+        success: false, 
+        message: "⚠️ CONFLICTO REAL: Alguien más guardó cambios en este recurso hace un instante. Recarga para no perder datos." 
+      }
+    }
+
+    // 5. PREPARACIÓN DE PERMISOS (Anti-Huérfanos)
+    const sharesToInsertUsers = (payload.shared_with || []).map(uid => ({
+      resource_id: resourceId,
+      user_id: uid,
+      resource_created_by: currentResource.created_by
+    }));
+
+    const sharesToInsertGroups = (payload.shared_groups || []).map(gid => ({
+      resource_id: resourceId,
+      group_id: gid,
+      resource_created_by: currentResource.created_by
+    }));
+
+    // 6. UPDATE ATÓMICO (Atomicidad de Versión)
+    const nextVersion = currentDbVersion + 1;
+
+    // Intersección de tipos para evitar 'any' y mantener tipado estricto
+    const dbUpdates: ResourceUpdateDB & { version: number } = {
       title: payload.title,
       description: payload.description,
       category: payload.category,
-      tags: payload.tags,
+      tags: payload.tags || [],
       is_public: payload.is_public,
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
+      version: nextVersion,
+      // file_url es opcional en ResourceUpdateDB
     }
 
     if (payload.link !== undefined) {
-      updates.file_url = payload.link;
+      dbUpdates.file_url = payload.link;
     }
 
-    // PASO A: Actualizar Tabla Principal
-    const { error: mainError } = await supabase
+    // Ejecutamos Update
+    // NOTA: Si el cliente no mandó versión, usamos la currentDbVersion para asegurar el "paso de testigo"
+    const { error: mainError, count } = await supabase
       .from('resources')
-      .update(updates)
+      .update(dbUpdates)
       .eq('id', resourceId)
+      .eq('version', currentDbVersion) // Compare-and-Swap estricto en BD
 
     if (mainError) throw new Error(mainError.message)
 
-    // PASO B: Sincronización Transaccional de Permisos
+    // Si count es 0, hubo una "Colisión de Carrera" (Race Condition) en el último milisegundo
+    if (count === 0) {
+      return { success: false, message: "Integridad de datos: El recurso fue modificado por otro proceso justo ahora." }
+    }
 
-    // 1. Limpieza Total
+    // 7. SINCRONIZACIÓN DE PERMISOS
     await supabase.from('resource_shares').delete().eq('resource_id', resourceId)
     await supabase.from('resource_group_shares').delete().eq('resource_id', resourceId)
 
-    // 2. Inserción de Nuevos Permisos (Solo si NO es público)
     if (!payload.is_public) {
-
       const permissionOps: PromiseLike<unknown>[] = [];
 
-      // Insertar Usuarios
-      if (payload.shared_with && payload.shared_with.length > 0) {
-        const userShares = payload.shared_with.map(userId => ({
-          resource_id: resourceId,
-          user_id: userId,
-          resource_created_by: user.id
-        }))
-        permissionOps.push(supabase.from('resource_shares').insert(userShares))
+      if (sharesToInsertUsers.length > 0) {
+        permissionOps.push(supabase.from('resource_shares').insert(sharesToInsertUsers))
       }
 
-      // Insertar Grupos
-      if (payload.shared_groups && payload.shared_groups.length > 0) {
-        const groupShares = payload.shared_groups.map(groupId => ({
-          resource_id: resourceId,
-          group_id: groupId,
-          resource_created_by: user.id
-        }))
-        permissionOps.push(supabase.from('resource_group_shares').insert(groupShares))
+      if (sharesToInsertGroups.length > 0) {
+        permissionOps.push(supabase.from('resource_group_shares').insert(sharesToInsertGroups))
       }
 
-      // Ejecutar inserciones
       if (permissionOps.length > 0) {
         await Promise.all(permissionOps);
-
-        // C. NOTIFICACIÓN POR CORREO
+        
+        // Notificación (Tu lógica original)
         await notifyNewShares(
           resourceId,
           payload.title,
           user.id,
-          payload.shared_with,
-          payload.shared_groups
+          payload.shared_with || [],
+          payload.shared_groups || []
         );
       }
     }
@@ -382,8 +485,31 @@ export async function restoreResource(resourceId: string) {
   return { success: true, message: "Recurso restaurado" }
 }
 
+// -----------------------------------------------------------------------------
+// ELIMINAR PERMANENTEMENTE (HARD DELETE) - BLINDADO CON ROLES
+// -----------------------------------------------------------------------------
 export async function deletePermanently(resourceId: string) {
   const supabase = await createClient()
+  
+  // 1. Obtener Usuario (Necesario para verificar permisos)
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, message: "No autorizado." }
+
+  // --- 🛡️ INICIO BLINDAJE DE SEGURIDAD ---
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single()
+
+  // Solo global_admin y admin pueden destruir datos. Auditor (user) NO.
+  if (!['global_admin', 'admin'].includes(profile?.role)) {
+    return { 
+      success: false, 
+      message: "⛔ Permiso denegado: No tienes nivel suficiente para eliminar registros definitivamente." 
+    }
+  }
+
   const { data: resource } = await supabase.from('resources').select('file_path, file_type').eq('id', resourceId).single()
 
   if (resource?.file_path && resource.file_type !== 'link') {
@@ -391,7 +517,9 @@ export async function deletePermanently(resourceId: string) {
   }
 
   const { error } = await supabase.from('resources').delete().eq('id', resourceId)
+  
   if (error) return { success: false, message: error.message }
+  
   revalidatePath('/', 'layout')
   return { success: true, message: "Eliminado permanentemente" }
 }

@@ -215,7 +215,7 @@ const sidebarItems = [
   { icon: Users, label: 'Compartidos', href: '/shared' },
   { icon: Briefcase, label: 'Grupos de Trabajo', href: '/groups' },
   { icon: Settings, label: 'Configuración', href: '/settings' },
-  { icon: BookOpen, label: 'Documentación', href: '/docs' },
+  { icon: BookOpen, label: 'Tutoriales de Uso', href: '/docs' },
 ]
 
 export function Sidebar() {
@@ -528,7 +528,7 @@ export function MobileSidebar() {
               </button>
               <div className="px-4 pt-6 text-[10px] text-slate-600 text-center">
                 <p className="font-bold opacity-50">Synapse IPG v1.0</p>
-                <p className="opacity-40">Designed by Luis Rivera Araya</p>
+                <p className="opacity-40">Designed and Developed by Luis Rivera Araya</p>
               </div>
             </div>
           </div>

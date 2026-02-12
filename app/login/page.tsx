@@ -467,7 +467,7 @@ export default function LoginPage() {
          </div>
 
          <div className="absolute bottom-6 text-center w-full text-[11px] text-slate-400 font-medium tracking-wide">
-            © 2026 IPG Synapse System. Todos los derechos reservados.
+            © 2026 IPG Synapse. Designed and Developed by Luis Rivera Araya.
          </div>
       </div>
     </div>

@@ -149,7 +149,7 @@ const PrivateBadge = () => (
 )
 
 // =====================================================================
-// 3. COMPONENTE PRINCIPAL (LOGICA CORREGIDA)
+// 3. COMPONENTE PRINCIPAL 
 // =====================================================================
 
 export function ResourceCard({ resource, variant = 'grid', onEdit, onDelete, onFavoriteToggle }: ResourceCardProps) {
@@ -231,11 +231,11 @@ export function ResourceCard({ resource, variant = 'grid', onEdit, onDelete, onF
     try { 
       await onDelete(resource.id) 
       setIsDeleted(true) // 2. ÉXITO: Desmontar componente
-      toast.success("Recurso eliminado correctamente")
+      toast.success("Enviado a la papelera")
     } catch (error) { 
       console.error("Error deleting resource:", error)
       setIsDeleting(false) // Revertir si falla
-      toast.error("No se pudo eliminar el recurso") 
+      toast.error("No se pudo enviar a la papelera") 
     }
   }
 
@@ -364,7 +364,7 @@ export function ResourceCard({ resource, variant = 'grid', onEdit, onDelete, onF
                       <Copy className="w-3.5 h-3.5 mr-2"/> Copiar enlace
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={handleDelete} className="text-red-600 cursor-pointer focus:text-red-600 focus:bg-red-50">
-                      <Trash2 className="w-3.5 h-3.5 mr-2"/> Eliminar
+                      <Trash2 className="w-3.5 h-3.5 mr-2"/> Enviar a la papelera
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -484,7 +484,7 @@ export function ResourceCard({ resource, variant = 'grid', onEdit, onDelete, onF
                       <Pencil className="w-3.5 h-3.5 mr-2"/> Editar
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={handleDelete} className="text-red-600 cursor-pointer focus:text-red-600 focus:bg-red-50">
-                      <Trash2 className="w-3.5 h-3.5 mr-2"/> Eliminar
+                      <Trash2 className="w-3.5 h-3.5 mr-2"/> Papelera
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
