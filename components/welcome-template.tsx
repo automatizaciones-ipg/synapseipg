@@ -42,7 +42,7 @@ export const WelcomeEmail = ({
       <Section className="text-center my-8">
         <Button
           className="bg-brand rounded-md text-white text-[14px] font-semibold no-underline text-center px-6 py-3"
-          href={`${baseUrl}/dashboard`}
+          href={`${baseUrl}`}
         >
           Acceder a la Plataforma
         </Button>
