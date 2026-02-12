@@ -26,14 +26,16 @@ export const WelcomeEmail = ({
       </Text>
 
       <Text className="text-textMain text-[15px] leading-[26px]">
-        El ecosistema Synapse de IPG ha sido diseñado para centralizar y potenciar nuestro flujo de trabajo.
+        El ecosistema Synapse de IPG ha sido diseñado para centralizar los recursos institucionales.
       </Text>
 
       {/* LISTA ESTILIZADA */}
       <Section className="bg-slate-50 rounded-lg p-5 my-6 border border-slate-100">
         <Text className="m-0 mb-2 text-[14px] text-slate-700">✅ <strong>Gestión:</strong> Sube y organiza recursos institucionales.</Text>
-        <Text className="m-0 mb-2 text-[14px] text-slate-700">🤝 <strong>Colaboración:</strong> Comparte archivos de forma segura.</Text>
-        <Text className="m-0 text-[14px] text-slate-700">⚡ <strong>Acceso:</strong> Descarga lo que necesites desde cualquier lugar.</Text>
+        <Text className="m-0 mb-2 text-[14px] text-slate-700">🤝 <strong>Colaboración:</strong> Comparte archivos de forma segura con usuarios de ipg.</Text>
+        <Text className="m-0 text-[14px] text-slate-700">⚡ <strong>Acceso:</strong> Descarga lo que necesites desde cualquier dispositivo y lugar.</Text>
+        <br/>
+        <Text className="m-0 text-[14px] text-slate-700">⚡ <strong>Cuenta:</strong> Tu contraseña actual es: ABCabc123 y te recomendamos cambiarla desde el login de la plataforma.</Text>
       </Section>
 
       {/* BOTÓN CTA */}
