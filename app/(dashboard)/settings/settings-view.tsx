@@ -29,11 +29,13 @@ import {
 } from "@/components/ui/alert-dialog"
 import { 
   User, Shield, Sparkles, HardDrive, 
-  LogOut, Loader2, Laptop, Camera, Trash2, AlertTriangle, Moon, Sun
+  LogOut, Loader2, Laptop, Camera, Trash2, AlertTriangle, 
+  Key, Lock, CheckCircle2 // Iconos nuevos para seguridad
 } from "lucide-react"
 
 import { toast } from "sonner"
-import { updateProfileSettings } from "@/actions/settings"
+// Asegúrate de tener estas importaciones correctas según tu estructura
+import { updateProfileSettings, changeUserPassword } from "@/actions/settings"
 import { UserProfile } from "@/types/settings"
 
 // --- UTILS ---
@@ -57,10 +59,10 @@ export function SettingsView({ user, profile, storageUsed }: SettingsViewProps) 
   const router = useRouter()
   const supabase = createClient()
   
-  const { theme, setTheme } = useTheme() // Quitamos resolvedTheme, no es necesario si forzamos el sistema
+  const { theme, setTheme } = useTheme() 
   const [mounted, setMounted] = useState(false)
 
-  // Estados Locales
+  // Estados Locales - Perfil
   const [fullName, setFullName] = useState(profile.full_name || "")
   const [bio, setBio] = useState(profile.bio || "")
   const [avatarUrl, setAvatarUrl] = useState<string | null>(profile.avatar_url)
@@ -68,8 +70,13 @@ export function SettingsView({ user, profile, storageUsed }: SettingsViewProps) 
   const [aiAutoTag, setAiAutoTag] = useState(profile.ai_autotag)
   const [emailNotifs, setEmailNotifs] = useState(profile.email_notifications)
 
-  // --- ESTADO OPTIMISTA PARA EL TEMA ---
-  // Inicializamos basado en props para evitar el flash, luego sincronizamos
+  // Estados Locales - Seguridad (Password)
+  const [currentPass, setCurrentPass] = useState("")
+  const [newPass, setNewPass] = useState("")
+  const [confirmPass, setConfirmPass] = useState("")
+  const [loadingPass, setLoadingPass] = useState(false)
+
+  // Estado Optimista Tema
   const [isDark, setIsDark] = useState(profile.theme === 'dark')
 
   const [loading, setLoading] = useState(false)
@@ -81,34 +88,26 @@ export function SettingsView({ user, profile, storageUsed }: SettingsViewProps) 
   const STORAGE_LIMIT = 500 * 1024 * 1024; 
   const storagePercentage = Math.min((storageUsed / STORAGE_LIMIT) * 100, 100)
 
-  // Sincronización Inicial Robusta
+  // Sincronización Inicial
   useEffect(() => {
     setMounted(true)
-    // Prioridad: Base de datos > LocalStorage existente > Light Default
     if (profile.theme && profile.theme !== 'system') {
         setTheme(profile.theme)
         setIsDark(profile.theme === 'dark')
     } else {
-        // Si por alguna razón es null, aseguramos light
         setIsDark(theme === 'dark')
     }
   }, [profile.theme, setTheme, theme])
 
-  // --- LOGIC: THEME & PREFERENCES (OPTIMISTIC UI) ---
+  // --- LOGIC: THEME & PREFS ---
   const handleThemeToggle = async (checked: boolean) => {
-    // 1. UI INSTANTÁNEA (Cero Lag)
     setIsDark(checked)
     const newTheme = checked ? "dark" : "light"
-    
-    // 2. Aplicar tema (Next-Themes maneja el DOM)
     setTheme(newTheme)
-
-    // 3. Persistir en DB (Asíncrono, no bloquea UI)
     try { 
         await updateProfileSettings({ theme: newTheme }) 
     } catch (error) { 
         console.error("Error guardando tema en DB", error)
-        // Opcional: Revertir si falla, aunque raramente vale la pena el parpadeo
     }
   }
 
@@ -176,7 +175,49 @@ export function SettingsView({ user, profile, storageUsed }: SettingsViewProps) 
       }
   }
 
-  // --- LOGIC: LOGOUT ---
+  // --- LOGIC: PASSWORD CHANGE (BLINDADA) ---
+  const handleChangePassword = async () => {
+    // 1. Validaciones Locales
+    if (!currentPass || !newPass || !confirmPass) {
+        toast.error("Completa todos los campos de contraseña")
+        return
+    }
+    if (newPass !== confirmPass) {
+        toast.error("La nueva contraseña no coincide con la confirmación")
+        return
+    }
+    if (newPass.length < 6) {
+        toast.error("La contraseña debe tener al menos 6 caracteres")
+        return
+    }
+    if (currentPass === newPass) {
+        toast.error("La nueva contraseña debe ser diferente a la actual")
+        return
+    }
+
+    setLoadingPass(true)
+    try {
+        // 2. Llamada al Server Action Seguro
+        const result = await changeUserPassword(currentPass, newPass)
+        
+        if (result.success) {
+            toast.success("Contraseña actualizada exitosamente")
+            // Limpiamos los campos por seguridad
+            setCurrentPass("")
+            setNewPass("")
+            setConfirmPass("")
+        } else {
+            toast.error(result.message || "No se pudo actualizar la contraseña")
+        }
+    } catch (error) {
+        console.error(error)
+        toast.error("Error inesperado en el servidor")
+    } finally {
+        setLoadingPass(false)
+    }
+  }
+
+  // --- LOGIC: LOGOUT & DELETE ---
   const handleLogout = async () => {
     await supabase.auth.signOut()
     toast.success("Sesión cerrada")
@@ -184,7 +225,6 @@ export function SettingsView({ user, profile, storageUsed }: SettingsViewProps) 
     router.push('/login')
   }
 
-  // --- LOGIC: DELETE ACCOUNT ---
   const handleDeleteAccount = async () => {
     setIsDeleting(true)
     try {
@@ -196,7 +236,7 @@ export function SettingsView({ user, profile, storageUsed }: SettingsViewProps) 
       router.push('/login')
     } catch (error) {
       console.error(error)
-      toast.error("Error crítico al eliminar la cuenta. Contacte soporte.")
+      toast.error("Error crítico al eliminar la cuenta.")
       setIsDeleting(false)
     }
   }
@@ -205,7 +245,7 @@ export function SettingsView({ user, profile, storageUsed }: SettingsViewProps) 
 
   return (
     <div className="space-y-6 pb-10">
-      {/* HEADER */}
+      {/* HEADER HERO */}
       <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-blue-600 to-indigo-700 dark:from-blue-900 dark:to-indigo-900 p-6 text-white shadow-lg transition-colors">
          <div className="relative z-10 flex items-center gap-6">
              <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
@@ -231,9 +271,10 @@ export function SettingsView({ user, profile, storageUsed }: SettingsViewProps) 
         <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="ai">IA & Auto</TabsTrigger>
-          <TabsTrigger value="danger">Cuenta</TabsTrigger>
+          <TabsTrigger value="account">Cuenta</TabsTrigger>
         </TabsList>
 
+        {/* --- PESTAÑA GENERAL --- */}
         <TabsContent value="general" className="space-y-6 mt-6">
           <div className="grid gap-6 md:grid-cols-2">
             
@@ -242,7 +283,7 @@ export function SettingsView({ user, profile, storageUsed }: SettingsViewProps) 
                <CardContent className="space-y-4">
                   <div className="space-y-2">
                      <Label>Nombre Completo</Label>
-                     <Input value={fullName} disabled />
+                     <Input value={fullName} disabled className="bg-slate-100/50 text-slate-500 cursor-not-allowed border-slate-200" />
                   </div>
                   <div className="space-y-2">
                      <Label>Biografía</Label>
@@ -270,11 +311,7 @@ export function SettingsView({ user, profile, storageUsed }: SettingsViewProps) 
                         {isDark ? 'Activado' : 'Desactivado'}
                       </p>
                     </div>
-                    {/* USAMOS EL ESTADO LOCAL 'isDark' PARA LA RESPUESTA INSTANTÁNEA */}
-                    <Switch 
-                        checked={isDark} 
-                        onCheckedChange={handleThemeToggle} 
-                    />
+                    <Switch checked={isDark} onCheckedChange={handleThemeToggle} />
                   </div>
                   <Separator />
                   <div className="flex items-center justify-between">
@@ -301,6 +338,7 @@ export function SettingsView({ user, profile, storageUsed }: SettingsViewProps) 
           </div>
         </TabsContent>
 
+        {/* --- PESTAÑA IA --- */}
         <TabsContent value="ai" className="mt-6">
           <Card>
             <CardHeader>
@@ -319,13 +357,87 @@ export function SettingsView({ user, profile, storageUsed }: SettingsViewProps) 
           </Card>
         </TabsContent>
 
-        <TabsContent value="danger" className="mt-6 space-y-6">
+        {/* --- PESTAÑA CUENTA (SEGURIDAD + DANGER) --- */}
+        <TabsContent value="account" className="mt-6 space-y-6">
+           
+           {/* 1. MODULO DE SEGURIDAD (NUEVO) */}
+           <Card className="border-slate-200 shadow-sm overflow-hidden">
+              <CardHeader className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-800">
+                 <CardTitle className="flex items-center gap-2 text-slate-800 dark:text-white">
+                    <Shield className="w-5 h-5 text-emerald-500"/> Seguridad y Acceso
+                 </CardTitle>
+                 <CardDescription>Gestiona tu contraseña para mantener tu cuenta protegida.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5 p-6 max-w-xl">
+                 
+                 <div className="grid gap-5">
+                     <div className="space-y-2">
+                        <Label>Contraseña Actual</Label>
+                        <div className="relative">
+                            <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                            <Input 
+                               type="password" 
+                               placeholder="Ingresa tu clave actual" 
+                               className="pl-9"
+                               value={currentPass}
+                               onChange={(e) => setCurrentPass(e.target.value)}
+                            />
+                        </div>
+                     </div>
+
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label>Nueva Contraseña</Label>
+                            <div className="relative">
+                                <Key className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                                <Input 
+                                   type="password" 
+                                   placeholder="Mínimo 6 caracteres" 
+                                   className="pl-9"
+                                   value={newPass}
+                                   onChange={(e) => setNewPass(e.target.value)}
+                                />
+                            </div>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Confirmar Contraseña</Label>
+                            <div className="relative">
+                                <CheckCircle2 className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                                <Input 
+                                   type="password" 
+                                   placeholder="Repite la nueva clave" 
+                                   className="pl-9"
+                                   value={confirmPass}
+                                   onChange={(e) => setConfirmPass(e.target.value)}
+                                />
+                            </div>
+                        </div>
+                     </div>
+                 </div>
+
+              </CardContent>
+              <CardFooter className="bg-slate-50/30 border-t px-6 py-4 flex justify-end">
+                 <Button 
+                    onClick={handleChangePassword} 
+                    disabled={loadingPass || !currentPass || !newPass}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                 >
+                    {loadingPass ? (
+                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Actualizando...</>
+                    ) : (
+                        "Actualizar Contraseña"
+                    )}
+                 </Button>
+              </CardFooter>
+           </Card>
+
+           {/* 2. ZONA DE PELIGRO */}
            <Card className="border-red-100 bg-red-50/30 dark:bg-red-950/10 dark:border-red-900">
               <CardHeader>
                  <CardTitle className="text-red-600 flex items-center gap-2">
-                    <Shield className="w-5 h-5"/> Zona de Peligro
+                    <AlertTriangle className="w-5 h-5"/> Zona de Peligro
                  </CardTitle>
-                 <CardDescription>Acciones irreversibles sobre tu cuenta.</CardDescription>
+                 <CardDescription>Acciones irreversibles.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                  
@@ -348,7 +460,7 @@ export function SettingsView({ user, profile, storageUsed }: SettingsViewProps) 
                     <div>
                        <h4 className="font-bold text-red-700 dark:text-red-400">Eliminar Cuenta</h4>
                        <p className="text-sm text-red-600/80 dark:text-red-400/70">
-                           Borrar permanentemente tu cuenta y todos tus datos.
+                           Borrar permanentemente tu cuenta y datos.
                        </p>
                     </div>
                     
@@ -374,9 +486,8 @@ export function SettingsView({ user, profile, storageUsed }: SettingsViewProps) 
                           <p>Esto eliminará permanentemente:</p>
                           <ul className="list-disc list-inside ml-2 space-y-1">
                               <li>Tu cuenta de usuario y perfil.</li>
-                              <li>Todos los recursos y archivos que hayas subido.</li>
-                              <li>Tus membresías en grupos.</li>
-                              <li>Tus favoritos y configuraciones.</li>
+                              <li>Todos los recursos y archivos.</li>
+                              <li>Tus membresías.</li>
                           </ul>
                         </div>
 
@@ -402,9 +513,7 @@ export function SettingsView({ user, profile, storageUsed }: SettingsViewProps) 
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
-
                  </div>
-
               </CardContent>
            </Card>
         </TabsContent>
