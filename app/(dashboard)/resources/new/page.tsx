@@ -27,6 +27,7 @@ export default function NewResourcePage() {
 
   // 1. CAPTURAR CONTEXTO INICIAL
   const initialFolderId = searchParams.get('folderId')
+  const initialCategory = searchParams.get('category')
 
   const [isMounted, setIsMounted] = useState(false)
   const [roleLoading, setRoleLoading] = useState(true)
@@ -45,7 +46,8 @@ export default function NewResourcePage() {
   const [formData, setFormData] = useState<ResourceFormData>({
     title: "",
     description: "",
-    category: "Otros",
+    // Usamos la categoría inicial si existe (Contexto Virtual Root)
+    category: initialCategory && initialCategory !== 'null' ? initialCategory : "Otros",
     tags: "",
     color: "#3b82f6",
     is_public: true, 
@@ -114,7 +116,7 @@ export default function NewResourcePage() {
     try {
       const result = await analyzeLinkMetadata(linkUrl)
       if (result) {
-        let matchedCategory = "Otros"
+        let matchedCategory = formData.category // Mantenemos la actual si no hay match
         if (result.category) {
             const found = CATEGORIES.find(c => c.toLowerCase() === result.category?.toLowerCase())
             if (found) matchedCategory = found
@@ -154,7 +156,7 @@ export default function NewResourcePage() {
     }
   }
 
-  // --- GUARDADO DEL RECURSO ---
+  // --- GUARDADO DEL RECURSO (CON REDIRECCIÓN EXACTA AL INICIO) ---
   const handleSave = async () => {
     if (!formData.title) return toast.error("El título es obligatorio")
     if (activeTab === "link" && !linkUrl) return toast.error("Falta el enlace")
@@ -165,6 +167,8 @@ export default function NewResourcePage() {
     }
 
     setLoading(true)
+    const toastId = toast.loading("Publicando recurso...")
+
     try {
         let filePath = null
         let fileType = 'link'
@@ -199,13 +203,36 @@ export default function NewResourcePage() {
 
         if (!result.success) throw new Error(result.message)
 
-        toast.success("Recurso publicado correctamente")
+        toast.success("Recurso publicado correctamente", { id: toastId })
         
+        // -----------------------------------------------------------------
+        // 🚀 REDIRECCIÓN AL INICIO (/) CONTEXTUALIZADA
+        // -----------------------------------------------------------------
+        
+        const baseUrl = '/' // ✅ Apunta a tu ruta raíz real
+        const params = new URLSearchParams()
+        
+        // 1. Contexto Carpeta Real (Si hay folder_id)
         if (selectedFolderId) {
-            sessionStorage.setItem('target_folder_open', selectedFolderId);
+            params.set('folderId', selectedFolderId)
+            // Si la carpeta pertenece a una categoría visual (ej: dentro de RRHH), la pasamos
+            if (formData.category && formData.category !== 'Otros' && formData.category !== 'Globales') {
+                params.set('category', formData.category)
+            }
+        } 
+        // 2. Contexto Raíz Virtual (Si no hay folder, pero es una Pestaña como Admisión)
+        else if (formData.category && formData.category !== 'Otros' && formData.category !== 'Globales') {
+             params.set('category', formData.category)
         }
+        
+        // 3. Si es Inicio puro (Sin params), la URL queda limpia '/'
 
-        window.location.href = '/';
+        const queryString = params.toString()
+        const finalUrl = queryString ? `${baseUrl}?${queryString}` : baseUrl
+
+        // Refresco y Navegación
+        router.refresh()
+        router.push(finalUrl)
         
     } catch (error: unknown) {
         let errorMessage = "Error desconocido al guardar"
@@ -215,29 +242,25 @@ export default function NewResourcePage() {
         console.error("❌ Error Save Resource:", errorMessage)
         
         if (errorMessage.toLowerCase().includes("infinite recursion")) {
-             toast.error("Error Crítico de Base de Datos: Recursión en políticas. Contacta al administrador.")
+             toast.error("Error Crítico de Base de Datos: Recursión en políticas. Contacta al administrador.", { id: toastId })
         } else {
-             toast.error(errorMessage)
+             toast.error(errorMessage, { id: toastId })
         }
     } finally {
         setLoading(false)
     }
   }
 
-  // ✅ LOGICA DE SELECCION DE ARCHIVO (Clean Code / Single Responsibility)
-  // Ahora acepta "File | null" para manejar la selección o la eliminación
+  // ✅ LOGICA DE SELECCION DE ARCHIVO
   const handleFileSelect = (file: File | null) => {
-    // Caso 1: Usuario quitó el archivo
     if (!file) {
         setSelectedFile(null)
         return
     }
-
-    // Caso 2: Usuario seleccionó un archivo
     if (file.size > MAX_FILE_SIZE) return toast.error("El archivo es demasiado grande (Máx 50MB)")
     
     setSelectedFile(file)
-    handleAnalyzeFile(file) // Analizamos el nuevo archivo
+    handleAnalyzeFile(file) 
   }
 
   if (!isMounted || roleLoading) {
@@ -307,11 +330,10 @@ export default function NewResourcePage() {
                 // 1. ESTADO VACÍO (Upload Zone Grande)
                 <div className="max-w-3xl mx-auto py-8">
                       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8 transition-all hover:shadow-md">
-                         {/* Pasamos el estado selectedFile y la funcion modificada */}
-                         <UploadZone 
+                          <UploadZone 
                             onFileSelect={handleFileSelect} 
                             selectedFile={selectedFile} 
-                         />
+                          />
                       </div>
                 </div>
                 ) : (
@@ -319,7 +341,6 @@ export default function NewResourcePage() {
                 <div className="grid lg:grid-cols-12 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
                     <div className="lg:col-span-7 space-y-6">
                         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 scale-95 opacity-80 hover:scale-100 hover:opacity-100 transition-all cursor-pointer">
-                            {/* Pasamos el estado selectedFile y la funcion modificada */}
                             <UploadZone 
                                 onFileSelect={handleFileSelect} 
                                 selectedFile={selectedFile} 
@@ -348,7 +369,7 @@ export default function NewResourcePage() {
             )}
         </TabsContent>
 
-        {/* --- CONTENIDO: LINK (SIN CAMBIOS) --- */}
+        {/* --- CONTENIDO: LINK --- */}
         <TabsContent value="link" className="mt-0 animate-in fade-in slide-in-from-bottom-2 duration-500">
           <div className="grid lg:grid-cols-12 gap-8">
             <div className="lg:col-span-7 space-y-6">

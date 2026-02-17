@@ -206,7 +206,7 @@ export function UserNav() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          <DropdownMenuItem onClick={() => router.push('/dashboard/settings')}>
+          <DropdownMenuItem onClick={() => router.push('/settings')}>
             Configuración
           </DropdownMenuItem>
         </DropdownMenuGroup>
