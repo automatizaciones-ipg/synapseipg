@@ -61,6 +61,9 @@ interface ResourceBrowserProps {
   userRole: 'admin' | 'auditor'
   browserContext: 'home' | 'mine' | 'favorites' | 'shared'
   systemTabs?: SystemTab[]
+  // 🔥 NUEVOS PROPS: Para escuchar la redirección desde NewResourcePage
+  initialCategory?: string 
+  initialFolderId?: string
 }
 
 // ✅ INTERFAZ ESTRICTA PARA LA RESPUESTA DE CREAR CARPETA
@@ -76,7 +79,10 @@ export function ResourceBrowser({
   userEmail,
   userRole,
   browserContext,
-  systemTabs = []
+  systemTabs = [],
+  // Recibimos los parámetros de contexto
+  initialCategory,
+  initialFolderId
 }: ResourceBrowserProps) {
 
   const router = useRouter()
@@ -87,13 +93,46 @@ export function ResourceBrowser({
 
   const defaultTab = isGlobalContext ? "Inicio" : "Todos"
 
-  // --- ESTADOS ---
+  // ----------------------------------------------------------------------
+  // 🔥 LÓGICA DE INICIALIZACIÓN CONTEXTUAL (SOLUCIÓN ROBUSTA) 🔥
+  // ----------------------------------------------------------------------
+  
+  // 1. Calcular Categoría Inicial (Si viene de redirección URL > Default)
+  const startCategory = useMemo(() => {
+      if (initialCategory && initialCategory !== 'null' && initialCategory !== 'undefined') {
+          return initialCategory;
+      }
+      return defaultTab;
+  }, [initialCategory, defaultTab]);
+
+  // 2. Calcular Carpeta Inicial (Si viene de redirección URL > Null)
+  const startFolderId = useMemo(() => {
+      if (initialFolderId && initialFolderId !== 'null' && initialFolderId !== 'undefined') {
+          return initialFolderId;
+      }
+      return null;
+  }, [initialFolderId]);
+
+  // 3. Reconstruir Breadcrumb Inicial (Para que el título no se vea vacío)
+  // Intentamos encontrar la carpeta en la lista inicial para mostrar su nombre
+  const startFolderPath = useMemo(() => {
+      if (!startFolderId) return [];
+      const foundFolder = initialFolders.find(f => f.id === startFolderId);
+      return foundFolder ? [foundFolder] : []; 
+  }, [startFolderId, initialFolders]);
+
+
+  // --- ESTADOS (INICIALIZADOS CON LA INTELIGENCIA) ---
   const [searchTerm, setSearchTerm] = useState("")
-  const [selectedCategory, setSelectedCategory] = useState(defaultTab)
+  
+  // ✅ AQUÍ ESTÁ LA MAGIA: El estado nace con el valor de la URL
+  const [selectedCategory, setSelectedCategory] = useState(startCategory)
+  
   const [view, setView] = useState<'grid' | 'list'>('grid')
 
-  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null)
-  const [folderPath, setFolderPath] = useState<FolderType[]>([])
+  // ✅ AQUÍ TAMBIÉN: Si hay carpeta, nacemos dentro de ella
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(startFolderId)
+  const [folderPath, setFolderPath] = useState<FolderType[]>(startFolderPath)
 
   // ✅ TIPADO ESTRICTO DE ESTADO DE RECURSOS
   const [resources, setResources] = useState<ResourceWithRelations[]>(
@@ -126,8 +165,12 @@ export function ResourceBrowser({
     console.log("Total Resources Loaded:", resources.length);
     console.log("Total Folders Loaded:", initialFolders.length);
     console.log("User Role:", userRole);
+    // Log para verificar que la redirección funcionó
+    if (initialCategory || initialFolderId) {
+        console.log("✅ Redirección Detectada:", { category: selectedCategory, folder: currentFolderId });
+    }
     console.groupEnd();
-  }, [resources.length, initialFolders.length, browserContext, userRole]);
+  }, [resources.length, initialFolders.length, browserContext, userRole, initialCategory, initialFolderId]);
 
   // ----------------------------------------------------------------------
   // LISTA NEGRA TEMPORAL (EPHEMERAL BLACKLIST)
@@ -241,6 +284,9 @@ export function ResourceBrowser({
     setCurrentFolderId(null);
     setFolderPath([]);
     setSearchTerm("");
+    
+    // Opcional: Limpiar URL para que al refrescar no vuelva a la categoría anterior
+    // router.replace('/', { scroll: false });
   };
 
   const handleEnterFolder = (folder: FolderType) => {
@@ -453,7 +499,10 @@ export function ResourceBrowser({
           )}
 
           <Button asChild className="bg-blue-600 text-white hover:bg-blue-700 shadow-sm transition-colors">
-            <Link href="/resources/new">{isAuditor ? <><Link2 className="w-4 h-4 mr-2" /> Nuevo Recurso</> : <><Plus className="w-4 h-4 mr-2" /> Nuevo Recurso</>}</Link>
+            {/* 🔥 MANTENEMOS EL CONTEXTO EN EL BOTÓN PARA EL FUTURO 🔥 */}
+            <Link href={`/resources/new?folderId=${currentFolderId || ''}&category=${selectedCategory !== 'Inicio' ? selectedCategory : ''}`}>
+               {isAuditor ? <><Link2 className="w-4 h-4 mr-2" /> Nuevo Recurso</> : <><Plus className="w-4 h-4 mr-2" /> Nuevo Recurso</>}
+            </Link>
           </Button>
         </div>
       </div>
@@ -552,7 +601,10 @@ export function ResourceBrowser({
               <div className="flex gap-4 mt-4">
                 {/* ✅ BOTÓN NUEVA CARPETA (EMPTY STATE): Controlado por canCreateFolderHere */}
                 {canCreateFolderHere && <Button variant="outline" onClick={() => setIsCreatingFolder(true)}>Crear Carpeta</Button>}
-                <Button variant="default" asChild><Link href="/resources/new">Subir Archivo</Link></Button>
+                <Button variant="default" asChild>
+                    {/* ENLACE CONTEXTUAL TAMBIÉN EN EL ESTADO VACÍO */}
+                    <Link href={`/resources/new?folderId=${currentFolderId || ''}&category=${selectedCategory !== 'Inicio' ? selectedCategory : ''}`}>Subir Archivo</Link>
+                </Button>
               </div>
             )}
           </div>

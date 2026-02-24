@@ -25,7 +25,7 @@ export default function NewResourcePage() {
   const searchParams = useSearchParams()
   const supabase = createClient()
 
-  // 1. CAPTURAR CONTEXTO INICIAL
+  // 1. CAPTURAR CONTEXTO INICIAL (Para saber de dónde venimos)
   const initialFolderId = searchParams.get('folderId')
   const initialCategory = searchParams.get('category')
 
@@ -46,7 +46,7 @@ export default function NewResourcePage() {
   const [formData, setFormData] = useState<ResourceFormData>({
     title: "",
     description: "",
-    // Usamos la categoría inicial si existe (Contexto Virtual Root)
+    // Si la URL traía una categoría (ej: "Admisión"), la usamos de base
     category: initialCategory && initialCategory !== 'null' ? initialCategory : "Otros",
     tags: "",
     color: "#3b82f6",
@@ -116,7 +116,7 @@ export default function NewResourcePage() {
     try {
       const result = await analyzeLinkMetadata(linkUrl)
       if (result) {
-        let matchedCategory = formData.category // Mantenemos la actual si no hay match
+        let matchedCategory = formData.category
         if (result.category) {
             const found = CATEGORIES.find(c => c.toLowerCase() === result.category?.toLowerCase())
             if (found) matchedCategory = found
@@ -156,7 +156,7 @@ export default function NewResourcePage() {
     }
   }
 
-  // --- GUARDADO DEL RECURSO (CON REDIRECCIÓN EXACTA AL INICIO) ---
+  // --- GUARDADO DEL RECURSO (CON REDIRECCIÓN AL INICIO /) ---
   const handleSave = async () => {
     if (!formData.title) return toast.error("El título es obligatorio")
     if (activeTab === "link" && !linkUrl) return toast.error("Falta el enlace")
@@ -174,6 +174,7 @@ export default function NewResourcePage() {
         let fileType = 'link'
         let fileSize = 0
 
+        // Subida de Archivo
         if (activeTab === "file" && selectedFile) {
             fileType = selectedFile.type
             fileSize = selectedFile.size
@@ -206,31 +207,33 @@ export default function NewResourcePage() {
         toast.success("Recurso publicado correctamente", { id: toastId })
         
         // -----------------------------------------------------------------
-        // 🚀 REDIRECCIÓN AL INICIO (/) CONTEXTUALIZADA
+        // 🚀 REDIRECCIÓN EXACTA A TU INICIO (/)
         // -----------------------------------------------------------------
+        // Aquí construimos la URL para que 'ResourceBrowser' sepa dónde abrirse.
         
-        const baseUrl = '/' // ✅ Apunta a tu ruta raíz real
+        const baseUrl = '/' // Tu ruta raíz donde vive el navegador
         const params = new URLSearchParams()
         
-        // 1. Contexto Carpeta Real (Si hay folder_id)
+        // Lógica de Contexto (Igual a tu FolderSelector):
+        
+        // 1. Si se guardó en una CARPETA ESPECÍFICA
         if (selectedFolderId) {
             params.set('folderId', selectedFolderId)
-            // Si la carpeta pertenece a una categoría visual (ej: dentro de RRHH), la pasamos
+            
+            // Enviamos también la categoría para mantener la pestaña activa
             if (formData.category && formData.category !== 'Otros' && formData.category !== 'Globales') {
                 params.set('category', formData.category)
             }
         } 
-        // 2. Contexto Raíz Virtual (Si no hay folder, pero es una Pestaña como Admisión)
+        // 2. Si se guardó en una PESTAÑA (Raíz Virtual, sin carpeta)
         else if (formData.category && formData.category !== 'Otros' && formData.category !== 'Globales') {
              params.set('category', formData.category)
         }
         
-        // 3. Si es Inicio puro (Sin params), la URL queda limpia '/'
+        // Generamos la URL final: "/" o "/?category=Admisión" o "/?folderId=XYZ"
+        const finalUrl = params.toString() ? `${baseUrl}?${params.toString()}` : baseUrl
 
-        const queryString = params.toString()
-        const finalUrl = queryString ? `${baseUrl}?${queryString}` : baseUrl
-
-        // Refresco y Navegación
+        // Refrescamos caché de Next.js y navegamos
         router.refresh()
         router.push(finalUrl)
         
@@ -251,7 +254,6 @@ export default function NewResourcePage() {
     }
   }
 
-  // ✅ LOGICA DE SELECCION DE ARCHIVO
   const handleFileSelect = (file: File | null) => {
     if (!file) {
         setSelectedFile(null)
@@ -299,7 +301,7 @@ export default function NewResourcePage() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         
-        {/* Selector de Tipo (Archivo vs Link) */}
+        {/* Selector de Tipo */}
         <div className="w-full bg-slate-100/50 p-1.5 rounded-lg mb-8">
             <TabsList className="grid w-full grid-cols-2 h-auto bg-transparent p-0 gap-2">
             {isAdmin ? (
@@ -327,7 +329,6 @@ export default function NewResourcePage() {
         <TabsContent value="file" className="mt-0 animate-in fade-in slide-in-from-bottom-2 duration-500">
             {activeTab === 'file' && isAdmin && (
                 !selectedFile ? (
-                // 1. ESTADO VACÍO (Upload Zone Grande)
                 <div className="max-w-3xl mx-auto py-8">
                       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8 transition-all hover:shadow-md">
                           <UploadZone 
@@ -337,7 +338,6 @@ export default function NewResourcePage() {
                       </div>
                 </div>
                 ) : (
-                // 2. ESTADO CON ARCHIVO (Grid con Preview + Form)
                 <div className="grid lg:grid-cols-12 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
                     <div className="lg:col-span-7 space-y-6">
                         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 scale-95 opacity-80 hover:scale-100 hover:opacity-100 transition-all cursor-pointer">
@@ -373,8 +373,6 @@ export default function NewResourcePage() {
         <TabsContent value="link" className="mt-0 animate-in fade-in slide-in-from-bottom-2 duration-500">
           <div className="grid lg:grid-cols-12 gap-8">
             <div className="lg:col-span-7 space-y-6">
-                
-                {/* Input de URL */}
                 <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-5">
                     <div className="flex flex-col space-y-1">
                         <Label className="text-base font-semibold text-slate-800">Enlace del Recurso</Label>
@@ -391,7 +389,6 @@ export default function NewResourcePage() {
                     </div>
                 </div>
 
-                {/* Vista Previa Link */}
                 <div className="bg-slate-50/30 rounded-2xl p-6 border border-slate-100">
                       <Label className="text-slate-400 mb-5 block text-[10px] uppercase tracking-widest font-bold">Vista Previa</Label>
                       <ResourcePreview 
@@ -404,7 +401,6 @@ export default function NewResourcePage() {
                 </div>
             </div>
             
-            {/* Formulario Lateral */}
             <div className="lg:col-span-5">
                 <ResourceForm 
                       {...formProps}
