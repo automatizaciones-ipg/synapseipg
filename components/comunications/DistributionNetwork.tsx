@@ -282,7 +282,6 @@ export default function DistributionNetwork({ resources, folders, selectedCatego
         const children = activeFolders.filter(f => f.parent_id === folder.id);
         children.forEach(cf => {
           processFolder(cf, depth + 1);
-          // 🔥 BUG FIX 1: Faltaba crear la conexión visual entre carpetas anidadas (padre -> hija)
           edges.push({ id: `e-${folderId}-fol-${cf.id}`, source: folderId, target: `fol-${cf.id}`, ...edgeFolder });
         });
         
@@ -292,7 +291,6 @@ export default function DistributionNetwork({ resources, folders, selectedCatego
           nodes.push({
             id: resId, type: 'resource',
             position: { x: X_START + (depth + 1) * X_GAP, y: currentY },
-            // 🔥 BUG FIX 2: Obligamos a React Flow a saber las posiciones antes de animar
             sourcePosition: Position.Right, targetPosition: Position.Left,
             data: { id: r.id, title: r.title, type: r.file_type || 'FILE', access: r.is_public ? 'global' : 'user', size: formatBytes(r.file_size) }
           });
@@ -305,7 +303,6 @@ export default function DistributionNetwork({ resources, folders, selectedCatego
         nodes.push({
           id: folderId, type: 'folder',
           position: { x: X_START + depth * X_GAP, y: (fStartY + currentY - Y_GAP) / 2 },
-          // 🔥 BUG FIX 2: Obligamos a React Flow a saber las posiciones antes de animar
           sourcePosition: Position.Right, targetPosition: Position.Left,
           data: { id: folder.id, label: folder.name, isGlobal: Boolean(folder.is_global) }
         });
@@ -428,13 +425,14 @@ export default function DistributionNetwork({ resources, folders, selectedCatego
         </div>
       </div>
 
-      {/* MODAL HIGH-END RESPONSIVE */}
+      {/* MODAL HIGH-END RESPONSIVE (CORREGIDO PARA ACCESIBILIDAD MÓVIL) */}
       {selectedNodeResource && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-[#020617]/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           
           <div className="absolute inset-0 cursor-pointer" onClick={() => setSelectedNodeResource(null)}></div>
 
-          <div className="relative w-[95%] sm:w-full max-w-[420px] max-h-[90vh] overflow-y-auto bg-[#0b1120] border border-slate-700/60 rounded-2xl shadow-[0_20px_60px_-15px_rgba(6,182,212,0.2)] z-10 custom-scrollbar animate-in zoom-in-95 duration-200">
+          {/* FIX 1: max-h-[calc(100%-2rem)] garantiza que nunca se corte en pantallas pequeñas y siempre permita hacer scroll */}
+          <div className="relative w-[95%] sm:w-full max-w-[420px] max-h-[calc(100%-2rem)] overflow-y-auto bg-[#0b1120] border border-slate-700/60 rounded-2xl shadow-[0_20px_60px_-15px_rgba(6,182,212,0.2)] z-10 custom-scrollbar animate-in zoom-in-95 duration-200">
             
             <div className="flex justify-between items-center p-3 md:p-4 border-b border-slate-800 bg-[#0f172a]/50 sticky top-0 z-20 backdrop-blur-md">
               <span className="text-[9px] md:text-[10px] font-mono text-cyan-400 tracking-[0.2em] uppercase flex items-center gap-1.5 md:gap-2">
@@ -462,7 +460,8 @@ export default function DistributionNetwork({ resources, folders, selectedCatego
                 <span className="uppercase text-cyan-400">{selectedNodeResource.file_type || 'FILE'}</span>
               </div>
 
-              <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-2 md:gap-3 mb-5 md:mb-6">
+              {/* FIX 2: grid-cols-2 siempre para evitar que en móviles tome todo el espacio vertical de la pantalla */}
+              <div className="w-full grid grid-cols-2 gap-2 md:gap-3 mb-5 md:mb-6">
                 
                 <div className="flex flex-col text-left bg-slate-900/50 p-2.5 md:p-3 rounded-xl border border-slate-800/80">
                   <span className="text-[8px] md:text-[9px] text-slate-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">
@@ -512,23 +511,24 @@ export default function DistributionNetwork({ resources, folders, selectedCatego
                 </div>
               </div>
 
-              <div className="w-full flex flex-col sm:flex-row gap-2.5 md:gap-3">
+              {/* FIX 3: Los botones ahora son flex-row en móvil también, lo que ahorra un bloque vertical completo y se ve mejor */}
+              <div className="w-full flex flex-row gap-2 md:gap-3">
                 <button
                   onClick={() => {
                     navigator.clipboard.writeText(`${window.location.origin}/resources/${selectedNodeResource.id}`);
                     alert("¡Enlace copiado al portapapeles!"); 
                   }}
-                  className="w-full sm:flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border border-slate-700 hover:border-slate-500 hover:bg-slate-800 text-slate-300 transition-all text-xs font-bold uppercase tracking-wide group"
+                  className="flex-1 w-full flex items-center justify-center gap-1.5 md:gap-2 py-3 rounded-xl border border-slate-700 hover:border-slate-500 hover:bg-slate-800 text-slate-300 transition-all text-xs font-bold uppercase tracking-wide group"
                 >
                   <Copy className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                  Copiar Link
+                  Copiar
                 </button>
                 <button
                   onClick={() => window.open(`/resources/${selectedNodeResource.id}`, '_blank', 'noopener,noreferrer')}
-                  className="w-full sm:flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white transition-all text-xs font-bold uppercase tracking-wide shadow-[0_0_20px_rgba(8,145,178,0.3)] hover:shadow-[0_0_30px_rgba(8,145,178,0.6)] group"
+                  className="flex-1 w-full flex items-center justify-center gap-1.5 md:gap-2 py-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white transition-all text-xs font-bold uppercase tracking-wide shadow-[0_0_20px_rgba(8,145,178,0.3)] hover:shadow-[0_0_30px_rgba(8,145,178,0.6)] group"
                 >
                   <ExternalLink className="w-4 h-4 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-                  Ver Recurso
+                  Ver
                 </button>
               </div>
             </div>
