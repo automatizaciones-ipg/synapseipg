@@ -18,6 +18,7 @@ import {
   Heart,
   Briefcase,
   Trash2,
+  Activity,
   BookOpen
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'

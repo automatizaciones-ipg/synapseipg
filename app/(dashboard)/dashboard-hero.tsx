@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { FolderOpen, Zap, Sparkles, Globe, Clock, FileText, ArrowUpRight, Database, Image as ImageIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import Link from 'next/link' // Importación necesaria para navegación real
+import Link from 'next/link'
 
 // --- TIPOS ---
 type NodeType = { id: number; x: number; y: number; r: number; delay: number }
@@ -17,7 +17,6 @@ type ConnectionType = {
   duration: number
 }
 
-// Tipo exportado para uso en page.tsx
 export type GlobalResource = {
   id: string;
   title: string;
@@ -29,7 +28,7 @@ export type GlobalResource = {
 export function DashboardHero({
   children,
   userEmail,
-  recentResources = [] // Array vacío por defecto si no llegan datos
+  recentResources = []
 }: {
   children: React.ReactNode
   userEmail?: string
@@ -40,7 +39,7 @@ export function DashboardHero({
   
   const [currentIndex, setCurrentIndex] = useState(0)
 
-  // Lógica de Nodos (Tu código original)
+  // Lógica de Nodos Original (Mantenida intacta para el efecto visual)
   useEffect(() => {
     const generateData = () => {
       const nodeCount = 12;
@@ -79,7 +78,7 @@ export function DashboardHero({
     generateData()
   }, [])
 
-  // Lógica del Rotador "Alive"
+  // Lógica del Rotador
   useEffect(() => {
     if (recentResources.length <= 1) return;
     const interval = setInterval(() => {
@@ -91,18 +90,17 @@ export function DashboardHero({
   const showNetwork = nodes.length > 0
   const currentResource = recentResources.length > 0 ? recentResources[currentIndex] : null
 
-  // Helper de Iconos
   const getIcon = (type: string) => {
-     if (type === 'PDF') return <FileText className="w-5 h-5 text-red-400"/>;
-     if (type === 'IMG') return <ImageIcon className="w-5 h-5 text-purple-400"/>;
-     return <Database className="w-5 h-5 text-blue-400"/>;
+     if (type === 'PDF') return <FileText className="w-4 h-4 text-red-400"/>;
+     if (type === 'IMG') return <ImageIcon className="w-4 h-4 text-purple-400"/>;
+     return <Database className="w-4 h-4 text-blue-400"/>;
   }
 
   return (
-    <div className="space-y-8 min-h-screen pb-10">
-
-      {/* --- HERO SECTION --- */}
-      <div className="relative w-full min-h-[200px] lg:h-[240px] overflow-hidden rounded-3xl bg-[#0B1120] border border-blue-900/30 shadow-2xl group select-none transform-gpu translate-z-0">
+    <div className="space-y-6 min-h-screen pb-10">
+      {/* --- HERO SECTION COMPACTO --- */}
+      {/* Altura reducida de min-h-[200px]/lg:h-[240px] a min-h-[140px]/lg:h-[160px] */}
+      <div className="relative w-full min-h-[140px] lg:h-[160px] overflow-hidden rounded-2xl bg-[#0B1120] border border-blue-900/30 shadow-xl group select-none transform-gpu translate-z-0">
 
         {/* 1. FONDO */}
         <div className="absolute inset-0 bg-gradient-to-r from-[#050914] via-[#0B1120] to-[#1e3a8a] opacity-90" />
@@ -143,49 +141,52 @@ export function DashboardHero({
           </svg>
         )}
 
-        {/* 2. CONTENIDO GRID */}
-        <div className="relative z-10 w-full h-full p-6 md:p-8 lg:px-12 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+        {/* 2. CONTENIDO GRID AJUSTADO */}
+        {/* Reducimos el padding y ajustamos el layout vertical en móviles */}
+        <div className="relative z-10 w-full h-full p-4 md:px-8 grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-8 items-center">
 
-          {/* COLUMNA IZQUIERDA */}
-          <div className="lg:col-span-7 flex flex-col md:flex-row items-center md:items-start lg:items-center gap-6 text-center md:text-left">
+          {/* COLUMNA IZQUIERDA COMPACTA */}
+          <div className="lg:col-span-7 flex flex-row items-center gap-4 lg:gap-6 text-left">
+            {/* Ícono central más pequeño */}
              <motion.div
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ duration: 0.5, ease: "easeOut" }}
-              className="relative shrink-0"
+              className="relative shrink-0 hidden sm:block"
             >
-              <div className="absolute inset-0 bg-blue-500 blur-2xl opacity-20 rounded-full" />
-              <div className="w-16 h-16 md:w-20 md:h-20 bg-gradient-to-br from-blue-600 to-indigo-900 rounded-2xl flex items-center justify-center shadow-lg border border-blue-400/30 relative overflow-hidden group-hover:scale-105 transition-transform duration-300">
+              <div className="absolute inset-0 bg-blue-500 blur-xl opacity-20 rounded-full" />
+              <div className="w-12 h-12 md:w-16 md:h-16 bg-gradient-to-br from-blue-600 to-indigo-900 rounded-xl flex items-center justify-center shadow-lg border border-blue-400/30 relative overflow-hidden group-hover:scale-105 transition-transform duration-300">
                 <div className="absolute inset-0 bg-white/10 translate-x-[-150%] group-hover:translate-x-[150%] transition-transform duration-700 ease-in-out skew-x-12" />
-                <FolderOpen className="w-8 h-8 md:w-9 md:h-9 text-white drop-shadow-md z-10" />
+                <FolderOpen className="w-6 h-6 md:w-8 md:h-8 text-white drop-shadow-md z-10" />
               </div>
               <motion.div
-                className="absolute -top-1 -right-1 w-5 h-5 bg-yellow-400 rounded-full border-4 border-[#0B1120] z-20 flex items-center justify-center shadow-sm"
+                className="absolute -top-1 -right-1 w-4 h-4 bg-yellow-400 rounded-full border-[3px] border-[#0B1120] z-20 flex items-center justify-center shadow-sm"
                 initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.4, type: "spring" }}
               >
-                <Sparkles className="w-2.5 h-2.5 text-yellow-900" />
+                <Sparkles className="w-2 h-2 text-yellow-900" />
               </motion.div>
             </motion.div>
 
-            <div className="flex flex-col space-y-2">
+            <div className="flex flex-col space-y-1.5">
               <motion.div
                 initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2, duration: 0.4 }}
               >
-                <h1 className="text-3xl md:text-5xl font-black tracking-tight text-white">
+                {/* Texto más pequeño */}
+                <h1 className="text-2xl md:text-3xl lg:text-4xl font-black tracking-tight text-white leading-none">
                   Inicio
                 </h1>
               </motion.div>
 
               <motion.div
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3, duration: 0.4 }}
-                className="flex flex-col md:flex-row items-center gap-3"
+                className="flex flex-wrap items-center gap-2"
               >
-                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-950/40 border border-blue-500/20 backdrop-blur-sm">
-                  <Zap className="w-3.5 h-3.5 text-blue-400 fill-blue-400" />
-                  <span className="text-blue-200 text-sm font-medium">Explorador de Recursos IPG</span>
+                <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-950/40 border border-blue-500/20 backdrop-blur-sm">
+                  <Zap className="w-3 h-3 text-blue-400 fill-blue-400" />
+                  <span className="text-blue-200 text-xs font-medium">Explorador de Recursos</span>
                 </div>
                 {userEmail && (
-                  <span className="text-xs text-blue-300/50 font-mono tracking-wide">
+                  <span className="text-[10px] text-blue-300/50 font-mono tracking-wide hidden sm:inline-block">
                     {userEmail}
                   </span>
                 )}
@@ -193,85 +194,79 @@ export function DashboardHero({
             </div>
           </div>
 
-          {/* COLUMNA DERECHA - LIVE GLOBAL FEED */}
+          {/* COLUMNA DERECHA - LIVE GLOBAL FEED COMPACTO */}
+          {/* Se ajustan márgenes y padding de la tarjeta */}
           <div className="lg:col-span-5 h-full flex items-center justify-center lg:justify-end">
-            
             <motion.div 
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.5, duration: 0.5 }}
-              className="w-full max-w-md bg-white/5 border border-white/10 backdrop-blur-md rounded-xl p-4 relative overflow-hidden shadow-2xl shadow-blue-900/20 hover:bg-white/10 transition-colors duration-300"
+              className="w-full max-w-sm bg-white/5 border border-white/10 backdrop-blur-md rounded-lg p-3 relative overflow-hidden shadow-xl hover:bg-white/10 transition-colors duration-300"
             >
-              {/* Header */}
-              <div className="flex justify-between items-center mb-4 border-b border-white/5 pb-2">
+              <div className="flex justify-between items-center mb-2.5 border-b border-white/5 pb-1.5">
                 <div className="flex items-center gap-2">
-                  <div className="relative flex h-2.5 w-2.5">
+                  <div className="relative flex h-2 w-2">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
                   </div>
-                  <span className="text-xs font-bold text-blue-100 tracking-wider uppercase">Actividad Global</span>
+                  <span className="text-[10px] font-bold text-blue-100 tracking-wider uppercase">Actividad Global</span>
                 </div>
-                <div className="flex items-center gap-1 text-[10px] text-blue-300 bg-blue-900/30 px-2 py-0.5 rounded border border-blue-800">
-                  <Globe className="w-3 h-3" />
+                <div className="flex items-center gap-1 text-[9px] text-blue-300 bg-blue-900/30 px-1.5 py-0.5 rounded border border-blue-800">
+                  <Globe className="w-2.5 h-2.5" />
                   <span>Público</span>
                 </div>
               </div>
 
-              {/* Contenido Animado */}
-              <div className="h-[70px] relative"> 
+              <div className="h-[50px] relative"> 
                 <AnimatePresence mode="wait">
                   {currentResource ? (
                     <motion.div
                       key={currentResource.id}
-                      initial={{ y: 20, opacity: 0 }}
+                      initial={{ y: 10, opacity: 0 }}
                       animate={{ y: 0, opacity: 1 }}
-                      exit={{ y: -20, opacity: 0 }}
+                      exit={{ y: -10, opacity: 0 }}
                       transition={{ duration: 0.4, ease: "easeInOut" }}
                       className="absolute inset-0"
                     >
-                      {/* 🔥 LINK REAL: Se puede visitar el recurso al hacer click 🔥 */}
                       <Link 
-                        href={`/resources/${currentResource.id}`}   // <--- AQUÍ ESTÁ EL CAMBIO
-                        target="_blank"                             // Abre nueva pestaña
-                        rel="noopener noreferrer"                   // Seguridad obligatoria
-                        className="flex items-start gap-3 w-full h-full group cursor-pointer"
+                        href={`/resources/${currentResource.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-3 w-full h-full group cursor-pointer"
                       >
-                        {/* Icono */}
-                        <div className="h-10 w-10 rounded-lg bg-blue-600/20 flex items-center justify-center border border-blue-500/30 shrink-0 group-hover:border-blue-400 transition-colors">
+                        {/* Icono más pequeño */}
+                        <div className="h-8 w-8 rounded-md bg-blue-600/20 flex items-center justify-center border border-blue-500/30 shrink-0 group-hover:border-blue-400 transition-colors">
                             {getIcon(currentResource.type)}
                         </div>
                         
-                        {/* Info */}
                         <div className="flex-1 min-w-0">
-                          <h4 className="text-sm font-semibold text-white truncate pr-2 group-hover:text-blue-300 transition-colors">
+                          <h4 className="text-xs font-semibold text-white truncate pr-2 group-hover:text-blue-300 transition-colors">
                             {currentResource.title}
                           </h4>
-                          <div className="flex items-center gap-2 mt-1">
-                            <p className="text-xs text-blue-200/70 truncate max-w-[120px]">
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <p className="text-[10px] text-blue-200/70 truncate max-w-[100px]">
                               Por {currentResource.author}
                             </p>
-                            <span className="text-[10px] text-white/30">•</span>
-                            <span className="flex items-center gap-1 text-[10px] text-green-400 font-medium">
-                              <Clock className="w-3 h-3" /> {currentResource.timeAgo}
+                            <span className="text-[8px] text-white/30">•</span>
+                            <span className="flex items-center gap-1 text-[9px] text-green-400 font-medium">
+                              <Clock className="w-2.5 h-2.5" /> {currentResource.timeAgo}
                             </span>
                           </div>
                         </div>
 
-                        {/* Flecha Acción */}
-                        <div className="h-8 w-8 rounded-full bg-white/5 group-hover:bg-blue-600 flex items-center justify-center transition-all border border-white/10 group-hover:border-blue-500 shrink-0">
-                          <ArrowUpRight className="w-4 h-4 text-blue-300 group-hover:text-white" />
+                        <div className="h-6 w-6 rounded-full bg-white/5 group-hover:bg-blue-600 flex items-center justify-center transition-all border border-white/10 group-hover:border-blue-500 shrink-0">
+                          <ArrowUpRight className="w-3 h-3 text-blue-300 group-hover:text-white" />
                         </div>
                       </Link>
                     </motion.div>
                   ) : (
-                    <div className="text-white/50 text-xs text-center pt-4 italic flex justify-center items-center h-full">
-                       <Clock className="w-3 h-3 mr-2 opacity-50"/> Esperando actividad...
+                    <div className="text-white/50 text-[10px] text-center pt-2 italic flex justify-center items-center h-full">
+                       <Clock className="w-2.5 h-2.5 mr-1.5 opacity-50"/> Esperando actividad...
                     </div>
                   )}
                 </AnimatePresence>
               </div>
 
-              {/* Barra de Progreso */}
               {recentResources.length > 1 && (
                 <motion.div 
                   key={`progress-${currentIndex}`}
