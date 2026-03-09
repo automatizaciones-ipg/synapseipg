@@ -87,12 +87,20 @@ export default async function SharedPage() {
           // Transformamos usando tu lógica central
           const appRes = transformToAppResource(row.resources, user.id, true); // true = isShared
           
-          // Agregamos estado de favorito
-          appRes.is_favorite = favSet.has(appRes.id);
+          // 🔥 INYECCIÓN QUIRÚRGICA FASE BLUE:
+          // Inyectamos explícitamente los datos intactos del autor (profiles) y la fecha (created_at).
+          // Así nos aseguramos de que el modal de la Red Neuronal tenga la información correcta,
+          // esquivando cualquier aplanamiento que haga el 'transformToAppResource'.
+          const finalRes = {
+              ...appRes,
+              is_favorite: favSet.has(appRes.id),
+              profiles: row.resources.profiles || null, 
+              created_at: row.resources.created_at || row.created_at 
+          } as unknown as Resource;
 
           // Guardamos en el mapa (el último gana o se mantiene, evita duplicados)
-          if (!resourceMap.has(appRes.id)) {
-              resourceMap.set(appRes.id, appRes);
+          if (!resourceMap.has(finalRes.id)) {
+              resourceMap.set(finalRes.id, finalRes);
           }
       });
   };
