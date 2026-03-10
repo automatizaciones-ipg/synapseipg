@@ -94,7 +94,6 @@ export interface ResourceCardProps {
 // =====================================================================
 // 2. HELPERS VISUALES
 // =====================================================================
-// (Sin cambios en helpers visuales, se mantienen igual por eficiencia)
 
 const SharedUsersPreview = ({ users }: { users: ResourceShareRelation[] }) => {
   const validProfiles = users.map(u => u.profiles).filter((p): p is ResourceProfile => p !== null);
@@ -157,9 +156,6 @@ export function ResourceCard({ resource, variant = 'grid', onEdit, onDelete, onF
   const [copied, setCopied] = useState(false)
   const [isEditOpen, setIsEditOpen] = useState(false)
   
-  // ✅ LOGICA DE ELIMINACIÓN CORREGIDA
-  // isDeleting: Muestra el estado de carga (opacidad)
-  // isDeleted: Desmonta el componente (lo elimina visualmente)
   const [isDeleting, setIsDeleting] = useState(false)
   const [isDeleted, setIsDeleted] = useState(false)
 
@@ -221,34 +217,26 @@ export function ResourceCard({ resource, variant = 'grid', onEdit, onDelete, onF
     }
   }
 
-  // ✅ HANDLER DE ELIMINACIÓN DEFINITIVO
   const handleDelete = async (e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation()
     if (!onDelete) return
     
-    setIsDeleting(true) // 1. Feedback visual inmediato (grisáceo)
-    
+    setIsDeleting(true) 
     try { 
       await onDelete(resource.id) 
-      setIsDeleted(true) // 2. ÉXITO: Desmontar componente
+      setIsDeleted(true) 
       toast.success("Enviado a la papelera")
     } catch (error) { 
       console.error("Error deleting resource:", error)
-      setIsDeleting(false) // Revertir si falla
+      setIsDeleting(false) 
       toast.error("No se pudo enviar a la papelera") 
     }
   }
 
-  // ✅ HANDLER DE EDICIÓN CORREGIDO (Sin redirección)
   const handleEdit = (e: React.MouseEvent) => {
     e.preventDefault(); 
-    e.stopPropagation() // Detiene que el click suba a la tarjeta (que tiene router.push)
-    
-    setIsEditOpen(true) // Solo abre el modal local
-    
-    // ❌ ELIMINADO: if (onEdit) onEdit(resource)
-    // Razón: Si el padre tiene un onEdit que redirige, esto rompía tu UX.
-    // Ahora forzamos que sea el modal interno el que mande.
+    e.stopPropagation() 
+    setIsEditOpen(true) 
   }
 
   const getResourceStyle = () => {
@@ -268,25 +256,20 @@ export function ResourceCard({ resource, variant = 'grid', onEdit, onDelete, onF
   const style = getResourceStyle()
   const IconComponent = style.icon
 
-  // ✅ SI SE ELIMINÓ CON ÉXITO, NO RENDERIZAR NADA (Evita que reaparezca)
   if (isDeleted) return null;
 
-  // Objeto de datos sanitizado para el modal de edición
-  // Se agregan todos los campos requeridos para una edición completa
   const editResourceData = {
     id: resource.id,
     title: resource.title,
-    // Fix Type Error: Null -> String vacío
     description: resource.description || "", 
     category: resource.category,
-    // Fix "Pocos Datos": Enviamos Tags y URL
     tags: resource.tags || [],
     file_url: resource.file_url || resource.file_path || "",
     is_public: resource.is_public
   };
 
   // =====================================================================
-  // VISTA: LISTA
+  // VISTA: LISTA (Intacta, tal como la pediste)
   // =====================================================================
   if (variant === 'list') {
     return (
@@ -295,7 +278,6 @@ export function ResourceCard({ resource, variant = 'grid', onEdit, onDelete, onF
           onClick={() => router.push(`/resources/${resource.id}`)}
           className={cn(
             "group flex items-center gap-3 md:gap-4 bg-white border border-slate-200 rounded-lg p-2.5 md:p-3 hover:shadow-md transition-all duration-200 hover:border-blue-200 relative cursor-pointer min-w-0 w-full",
-            // Mantenemos tu configuración visual de eliminado mientras carga
             isDeleting && "opacity-50 pointer-events-none select-none grayscale"
           )}
         >
@@ -371,42 +353,42 @@ export function ResourceCard({ resource, variant = 'grid', onEdit, onDelete, onF
           </div>
         </div>
 
-        {/* ✅ MODAL CON DATOS COMPLETOS */}
         <EditResourceDialog 
           isOpen={isEditOpen} 
           onClose={() => setIsEditOpen(false)} 
-          resource={editResourceData} // Pasamos el objeto enriquecido
+          resource={editResourceData} 
         />
       </>
     )
   }
 
   // =====================================================================
-  // VISTA: GRID
+  // VISTA: GRID (Corregida responsividad y hover de favoritos)
   // =====================================================================
   return (
     <>
       <Card className={cn(
         "flex flex-col h-full group hover:shadow-xl transition-all duration-300 border-slate-200 overflow-visible relative cursor-pointer bg-white hover:-translate-y-1", 
-        // Visual de eliminado
         isDeleting && "opacity-50 pointer-events-none select-none grayscale"
       )} 
       onClick={() => router.push(`/resources/${resource.id}`)}
       >
         
-        <div className="absolute top-3 right-3 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+        {/* ✅ AJUSTE: Botón de favoritos siempre visible, se eliminó opacity-0 */}
+        <div className="absolute top-3 right-3 z-10 transition-opacity duration-300">
            <button 
              onClick={handleToggleFavorite}
              className={cn(
                "p-2 rounded-full bg-white/95 shadow-sm border transition-all backdrop-blur-sm hover:scale-105",
-               isFavorite ? "border-red-100 text-red-500" : "border-slate-100 text-slate-400 hover:text-red-500"
+               isFavorite ? "border-red-100 text-red-500" : "border-slate-100 text-slate-400 hover:text-red-500 hover:border-red-100"
              )}
            >
               <Heart className={cn("w-4 h-4", isFavorite && "fill-current")} />
            </button>
         </div>
 
-        <CardHeader className="flex flex-row gap-4 pb-2 pt-5 px-5 items-start">
+        {/* ✅ AJUSTE: shrink-0 añadido para proteger la cabecera en pantallas con zoom */}
+        <CardHeader className="flex flex-row gap-4 pb-2 pt-5 px-5 items-start shrink-0">
             <div 
               className="w-12 h-12 rounded-xl flex items-center justify-center text-white shadow-md shrink-0 group-hover:rotate-3 transition-transform duration-300"
               style={{ backgroundColor: style.color }}
@@ -429,31 +411,35 @@ export function ResourceCard({ resource, variant = 'grid', onEdit, onDelete, onF
             </div>
         </CardHeader>
         
-        <CardContent className="flex-grow px-5 py-2 space-y-3 flex flex-col">
-          <p className="text-sm text-slate-500 line-clamp-2 leading-relaxed h-[40px] font-normal">
+        {/* ✅ AJUSTE: Removidos los altos estáticos (h-[40px]), agrupados los elementos bottom para proteger el flex */}
+        <CardContent className="flex-grow px-5 py-2 flex flex-col gap-3 min-h-0">
+          <p className="text-sm text-slate-500 line-clamp-2 leading-relaxed font-normal">
               {resource.description || "Sin descripción disponible."}
           </p>
           
-          <div className="flex items-center justify-between mt-auto pt-2 border-t border-slate-50 min-h-[36px]">
-                <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-medium">
-                   <CalendarDays className="w-3.5 h-3.5" />
-                   {formattedDate}
+          <div className="mt-auto flex flex-col gap-2 pt-2 border-t border-slate-50">
+              <div className="flex items-center justify-between min-h-[28px]">
+                    <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-medium">
+                       <CalendarDays className="w-3.5 h-3.5" />
+                       {formattedDate}
+                    </div>
+                    <div className="flex justify-end pl-2">
+                       {renderStatus()}
+                    </div>
+              </div>
+              
+              {resource.tags && resource.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {resource.tags.slice(0, 2).map((tag) => (
+                    <span key={tag} className="text-[10px] px-2 py-0.5 rounded-md bg-slate-50 text-slate-500 border border-slate-100 font-medium truncate max-w-full">#{tag}</span>
+                  ))}
                 </div>
-                <div className="flex justify-end pl-2">
-                   {renderStatus()}
-                </div>
+              )}
           </div>
-          
-          {resource.tags && resource.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 pt-1">
-              {resource.tags.slice(0, 2).map((tag) => (
-                <span key={tag} className="text-[10px] px-2 py-0.5 rounded-md bg-slate-50 text-slate-500 border border-slate-100 font-medium">#{tag}</span>
-              ))}
-            </div>
-          )}
         </CardContent>
 
-        <CardFooter className="pt-3 pb-4 px-5 flex justify-between items-center mt-auto bg-slate-50/50 rounded-b-xl border-t border-slate-100">
+        {/* ✅ AJUSTE: shrink-0 añadido, se eliminó mt-auto redundante para proteger el footer */}
+        <CardFooter className="pt-3 pb-4 px-5 flex justify-between items-center bg-slate-50/50 rounded-b-xl border-t border-slate-100 shrink-0">
           <div className="flex items-center gap-2 max-w-[50%]">
             <Avatar className="h-6 w-6 border border-slate-200">
               <AvatarImage src={authorAvatar || ""} />
@@ -468,14 +454,14 @@ export function ResourceCard({ resource, variant = 'grid', onEdit, onDelete, onF
             </div>
           </div>
 
-          <div className="flex gap-1">
-              <Button size="sm" variant="ghost" className="h-7 w-7 px-0 text-slate-400 hover:text-slate-700" onClick={handleCopyLink} title="Copiar Link">
+          <div className="flex items-center gap-1 shrink-0">
+              <Button size="sm" variant="ghost" className="h-7 w-7 px-0 text-slate-400 hover:text-slate-700 shrink-0" onClick={handleCopyLink} title="Copiar Link">
                     {copied ? <Check className="w-3.5 h-3.5 text-green-600"/> : <Copy className="w-3.5 h-3.5" />}
               </Button>
               
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="h-7 w-7 p-0 text-slate-400 hover:text-blue-600 focus:ring-0">
+                  <Button variant="ghost" className="h-7 w-7 p-0 text-slate-400 hover:text-blue-600 focus:ring-0 shrink-0">
                     <MoreVertical className="w-3.5 h-3.5" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -489,7 +475,7 @@ export function ResourceCard({ resource, variant = 'grid', onEdit, onDelete, onF
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              <Button size="sm" variant="outline" className="h-7 px-3 text-xs border-slate-200 text-slate-600 hover:bg-white hover:text-blue-600 hover:border-blue-200 gap-1.5 ml-1 transition-colors" asChild onClick={(e) => e.stopPropagation()}>
+              <Button size="sm" variant="outline" className="h-7 px-3 text-xs border-slate-200 text-slate-600 hover:bg-white hover:text-blue-600 hover:border-blue-200 gap-1.5 ml-1 transition-colors shrink-0" asChild onClick={(e) => e.stopPropagation()}>
                   {isLink ? 
                     <a href={targetUrl} target="_blank" rel="noopener noreferrer">Visitar</a> : 
                     <a href={targetUrl} target="_blank" download>Descargar</a>
@@ -499,7 +485,6 @@ export function ResourceCard({ resource, variant = 'grid', onEdit, onDelete, onF
         </CardFooter>
       </Card>
 
-      {/* ✅ MODAL CON DATOS COMPLETOS (TAMBIEN EN GRID) */}
       <EditResourceDialog 
         isOpen={isEditOpen} 
         onClose={() => setIsEditOpen(false)} 
